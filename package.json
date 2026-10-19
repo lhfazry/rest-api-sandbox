@@ -1,0 +1,9 @@
+{
+  "name": "supplier-mock-api",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Mock Supplier API sandbox for the course 'REST API & System Integration for Non-Technical Team'. Zero dependencies.",
+  "scripts": {
+    "start": "node server/server.js"
+  }
+}

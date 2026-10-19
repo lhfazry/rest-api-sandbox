@@ -1,0 +1,23 @@
+[
+  {
+    "supplier_id": "SUP-001",
+    "supplier_name": "PT Maju Jaya Komponen",
+    "country": "Indonesia",
+    "contact_email": "procurement@majujaya.co.id",
+    "api_status": "active"
+  },
+  {
+    "supplier_id": "SUP-002",
+    "supplier_name": "CV Sentosa Parts",
+    "country": "Indonesia",
+    "contact_email": "sales@sentosaparts.co.id",
+    "api_status": "active"
+  },
+  {
+    "supplier_id": "SUP-003",
+    "supplier_name": "PT Nusantara Elektrik",
+    "country": "Indonesia",
+    "contact_email": "integration@nusantara-elektrik.co.id",
+    "api_status": "active"
+  }
+]

@@ -1,0 +1,809 @@
+{
+  "info": {
+    "_postman_id": "b1f2c3d4-0001-4a00-9000-suppliermock1",
+    "name": "Supplier Mock API — REST API & System Integration (Non-Technical Team)",
+    "description": "Collection latihan untuk sandbox Mock Supplier API. Jalankan server dengan `node sandbox/server/server.js` lalu pilih environment 'Supplier API — Local Sandbox'. Flow: Supplier System → REST API → Company Internal System → Dashboard.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "base_url", "value": "http://localhost:4010", "type": "string" },
+    { "key": "api_key", "value": "sup_demo_key_2026", "type": "string" },
+    { "key": "token", "value": "", "type": "string" }
+  ],
+  "item": [
+    {
+      "name": "1. Health",
+      "description": "Endpoint publik untuk memastikan service hidup.",
+      "item": [
+        {
+          "name": "Health Check (publik, tanpa auth)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/health", "host": ["{{base_url}}"], "path": ["health"] },
+            "description": "GET /health — cek status service. Tidak butuh API key."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200 OK', function () { pm.response.to.have.status(200); });",
+                  "pm.test('status = ok', function () { pm.expect(pm.response.json().status).to.eql('ok'); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "2. Authentication",
+      "description": "API Key (baca) dan Bearer Token (tulis).",
+      "item": [
+        {
+          "name": "Ambil Bearer Token (POST /auth/token)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"client_id\": \"company-dashboard\",\n  \"client_secret\": \"s3cr3t-demo\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/auth/token", "host": ["{{base_url}}"], "path": ["auth", "token"] },
+            "description": "POST /auth/token — ambil token. Test script otomatis menyimpan access_token ke collection variable {{token}}."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200 OK', function () { pm.response.to.have.status(200); });",
+                  "const jsonData = pm.response.json();",
+                  "pm.test('ada access_token', function () { pm.expect(jsonData.access_token).to.be.a('string'); });",
+                  "pm.collectionVariables.set('token', jsonData.access_token);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Token salah kredensial → 401",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"client_id\": \"company-dashboard\",\n  \"client_secret\": \"salah\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/auth/token", "host": ["{{base_url}}"], "path": ["auth", "token"] },
+            "description": "Kredensial salah harus membalas 401 Unauthorized."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 401 Unauthorized', function () { pm.response.to.have.status(401); });",
+                  "pm.test('punya error.code', function () { pm.expect(pm.response.json().error.code).to.eql('UNAUTHORIZED'); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "3. Suppliers",
+      "description": "Daftar supplier (butuh X-API-Key).",
+      "item": [
+        {
+          "name": "Daftar Supplier",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "X-API-Key", "value": "{{api_key}}" }],
+            "url": { "raw": "{{base_url}}/api/v1/suppliers", "host": ["{{base_url}}"], "path": ["api", "v1", "suppliers"] },
+            "description": "GET /api/v1/suppliers — balas { data, meta.total }."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200 OK', function () { pm.response.to.have.status(200); });",
+                  "pm.test('ada 3 supplier', function () { pm.expect(pm.response.json().meta.total).to.eql(3); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Detail Supplier SUP-001",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "X-API-Key", "value": "{{api_key}}" }],
+            "url": { "raw": "{{base_url}}/api/v1/suppliers/SUP-001", "host": ["{{base_url}}"], "path": ["api", "v1", "suppliers", "SUP-001"] },
+            "description": "GET /api/v1/suppliers/:supplierId."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200 OK', function () { pm.response.to.have.status(200); });",
+                  "pm.test('supplier_id = SUP-001', function () { pm.expect(pm.response.json().data.supplier_id).to.eql('SUP-001'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Supplier tidak ada → 404",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "X-API-Key", "value": "{{api_key}}" }],
+            "url": { "raw": "{{base_url}}/api/v1/suppliers/SUP-999", "host": ["{{base_url}}"], "path": ["api", "v1", "suppliers", "SUP-999"] },
+            "description": "Supplier tidak dikenal membalas 404 dengan error body standar."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 404 Not Found', function () { pm.response.to.have.status(404); });",
+                  "pm.test('error.code = NOT_FOUND', function () { pm.expect(pm.response.json().error.code).to.eql('NOT_FOUND'); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "4. Stock (Read)",
+      "description": "Membaca data stock: pagination, filter, sort.",
+      "item": [
+        {
+          "name": "Daftar Stock (pagination page=1 limit=5)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "X-API-Key", "value": "{{api_key}}" }],
+            "url": {
+              "raw": "{{base_url}}/api/v1/suppliers/SUP-001/stock?page=1&limit=5",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "suppliers", "SUP-001", "stock"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "5" }
+              ]
+            },
+            "description": "GET stock dengan pagination. Perhatikan meta.page / meta.total."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200 OK', function () { pm.response.to.have.status(200); });",
+                  "pm.test('meta.limit = 5', function () { pm.expect(pm.response.json().meta.limit).to.eql(5); });",
+                  "pm.test('data <= 5 item', function () { pm.expect(pm.response.json().data.length).to.be.at.most(5); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Filter Stock status=low",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "X-API-Key", "value": "{{api_key}}" }],
+            "url": {
+              "raw": "{{base_url}}/api/v1/suppliers/SUP-001/stock?status=low",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "suppliers", "SUP-001", "stock"],
+              "query": [{ "key": "status", "value": "low" }]
+            },
+            "description": "Filter berdasarkan stock_status."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200 OK', function () { pm.response.to.have.status(200); });",
+                  "pm.test('semua item low', function () {",
+                  "  pm.response.json().data.forEach(function (i) { pm.expect(i.stock_status).to.eql('low'); });",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Sort Stock stock_quantity:asc",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "X-API-Key", "value": "{{api_key}}" }],
+            "url": {
+              "raw": "{{base_url}}/api/v1/suppliers/SUP-001/stock?sort=stock_quantity:asc&limit=50",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "suppliers", "SUP-001", "stock"],
+              "query": [
+                { "key": "sort", "value": "stock_quantity:asc" },
+                { "key": "limit", "value": "50" }
+              ]
+            },
+            "description": "Urutkan dari stok terkecil. Bandingkan dengan :desc."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200 OK', function () { pm.response.to.have.status(200); });",
+                  "pm.test('terurut naik', function () {",
+                  "  const q = pm.response.json().data.map(function (i) { return i.stock_quantity; });",
+                  "  for (let i = 1; i < q.length; i++) { pm.expect(q[i]).to.be.at.least(q[i - 1]); }",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Detail Part MJK-BRG-6205",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "X-API-Key", "value": "{{api_key}}" }],
+            "url": {
+              "raw": "{{base_url}}/api/v1/suppliers/SUP-001/stock/MJK-BRG-6205",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "suppliers", "SUP-001", "stock", "MJK-BRG-6205"]
+            },
+            "description": "GET detail satu part."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200 OK', function () { pm.response.to.have.status(200); });",
+                  "pm.test('part_number sesuai', function () { pm.expect(pm.response.json().data.part_number).to.eql('MJK-BRG-6205'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Simulasi Latency 2 detik",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "X-API-Key", "value": "{{api_key}}" }],
+            "url": {
+              "raw": "{{base_url}}/api/v1/suppliers/SUP-001/stock?simulate=latency&ms=2000",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "suppliers", "SUP-001", "stock"],
+              "query": [
+                { "key": "simulate", "value": "latency" },
+                { "key": "ms", "value": "2000" }
+              ]
+            },
+            "description": "Respons sengaja lambat 2 detik. Lihat 'Time' di Postman."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200 OK (walau lambat)', function () { pm.response.to.have.status(200); });",
+                  "pm.test('response time > 1.5s', function () { pm.expect(pm.response.responseTime).to.be.above(1500); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "5. Stock (Write — butuh Bearer token)",
+      "description": "Operasi tulis butuh X-API-Key + Authorization: Bearer {{token}}. Ambil token di folder Authentication lebih dulu.",
+      "item": [
+        {
+          "name": "Tambah Stock (POST) → 201",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-API-Key", "value": "{{api_key}}" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"part_number\": \"MJK-NEW-001\",\n  \"part_name\": \"Pulley 3 Inch Demo\",\n  \"stock_quantity\": 75,\n  \"uom\": \"PCS\",\n  \"stock_location\": \"WH-JKT-01\",\n  \"stock_status\": \"available\",\n  \"unit_price\": 150000,\n  \"currency\": \"IDR\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/suppliers/SUP-001/stock",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "suppliers", "SUP-001", "stock"]
+            },
+            "description": "POST menambah satu record stock."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 201 Created atau 409 sudah ada', function () {",
+                  "  pm.expect([201, 409]).to.include(pm.response.code);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Tambah Stock TANPA API Key → 401",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"part_number\": \"X\",\n  \"part_name\": \"X\",\n  \"stock_quantity\": 1,\n  \"uom\": \"PCS\",\n  \"stock_location\": \"WH-X\",\n  \"stock_status\": \"available\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/suppliers/SUP-001/stock",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "suppliers", "SUP-001", "stock"]
+            },
+            "description": "Tanpa X-API-Key harus 401, sebelum validasi body."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 401 Unauthorized', function () { pm.response.to.have.status(401); });",
+                  "pm.test('error.code = UNAUTHORIZED', function () { pm.expect(pm.response.json().error.code).to.eql('UNAUTHORIZED'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Tulis pakai readonly-token → 403",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-API-Key", "value": "{{api_key}}" },
+              { "key": "Authorization", "value": "Bearer readonly-token" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"part_number\": \"MJK-NEW-002\",\n  \"part_name\": \"Demo Forbidden\",\n  \"stock_quantity\": 1,\n  \"uom\": \"PCS\",\n  \"stock_location\": \"WH-JKT-01\",\n  \"stock_status\": \"available\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/suppliers/SUP-001/stock",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "suppliers", "SUP-001", "stock"]
+            },
+            "description": "API key benar tapi token read-only → 403 Forbidden (beda dengan 401)."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 403 Forbidden', function () { pm.response.to.have.status(403); });",
+                  "pm.test('error.code = FORBIDDEN', function () { pm.expect(pm.response.json().error.code).to.eql('FORBIDDEN'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Replace Stock (PUT) → 200",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-API-Key", "value": "{{api_key}}" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"part_number\": \"MJK-BRG-6205\",\n  \"part_name\": \"Bearing 6205 ZZ (revisi)\",\n  \"stock_quantity\": 500,\n  \"uom\": \"PCS\",\n  \"stock_location\": \"WH-JKT-01\",\n  \"stock_status\": \"available\",\n  \"unit_price\": 46000,\n  \"currency\": \"IDR\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/suppliers/SUP-001/stock/MJK-BRG-6205",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "suppliers", "SUP-001", "stock", "MJK-BRG-6205"]
+            },
+            "description": "PUT mengganti SELURUH record."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200 OK atau 404', function () { pm.expect([200, 404]).to.include(pm.response.code); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update sebagian (PATCH) → 200",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-API-Key", "value": "{{api_key}}" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"stock_quantity\": 12,\n  \"stock_status\": \"low\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/suppliers/SUP-001/stock/MJK-GSK-KIT",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "suppliers", "SUP-001", "stock", "MJK-GSK-KIT"]
+            },
+            "description": "PATCH hanya mengubah field yang dikirim."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200 OK atau 404', function () { pm.expect([200, 404]).to.include(pm.response.code); });",
+                  "if (pm.response.code === 200) {",
+                  "  pm.test('stock_quantity jadi 12', function () { pm.expect(pm.response.json().data.stock_quantity).to.eql(12); });",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Bulk Upsert — Integration Sync (POST) → 201",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-API-Key", "value": "{{api_key}}" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"items\": [\n    {\n      \"part_number\": \"MJK-BRG-6205\",\n      \"part_name\": \"Bearing 6205 ZZ\",\n      \"stock_quantity\": 999,\n      \"uom\": \"PCS\",\n      \"stock_location\": \"WH-JKT-01\",\n      \"stock_status\": \"available\"\n    },\n    {\n      \"part_number\": \"MJK-SYNC-900\",\n      \"part_name\": \"Part Baru dari Sync\",\n      \"stock_quantity\": 20,\n      \"uom\": \"BOX\",\n      \"stock_location\": \"WH-JKT-04\",\n      \"stock_status\": \"low\"\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/suppliers/SUP-001/stock/bulk",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "suppliers", "SUP-001", "stock", "bulk"]
+            },
+            "description": "Endpoint 'integration sync': kirim array, sistem upsert (create/update)."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 201 Created', function () { pm.response.to.have.status(201); });",
+                  "pm.test('ada ringkasan created/updated', function () {",
+                  "  pm.expect(pm.response.json().data).to.have.property('created');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Hapus Stock (DELETE) → 204",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              { "key": "X-API-Key", "value": "{{api_key}}" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/suppliers/SUP-001/stock/MJK-SYNC-900",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "suppliers", "SUP-001", "stock", "MJK-SYNC-900"]
+            },
+            "description": "DELETE sukses membalas 204 No Content (tanpa body)."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 204 atau 404', function () { pm.expect([204, 404]).to.include(pm.response.code); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Body tidak valid (field kurang) → 400",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-API-Key", "value": "{{api_key}}" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"part_number\": \"INCOMPLETE-01\"\n}" },
+            "url": {
+              "raw": "{{base_url}}/api/v1/suppliers/SUP-001/stock",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "suppliers", "SUP-001", "stock"]
+            },
+            "description": "Field wajib kurang harus 400 dengan details[] berisi field yang salah."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 400 Bad Request', function () { pm.response.to.have.status(400); });",
+                  "pm.test('error.code = VALIDATION_ERROR', function () { pm.expect(pm.response.json().error.code).to.eql('VALIDATION_ERROR'); });",
+                  "pm.test('details tidak kosong', function () { pm.expect(pm.response.json().error.details.length).to.be.above(0); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "6. Production Planning",
+      "description": "Data rencana produksi supplier (data requirement dari silabus).",
+      "item": [
+        {
+          "name": "Daftar Production Plan",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "X-API-Key", "value": "{{api_key}}" }],
+            "url": {
+              "raw": "{{base_url}}/api/v1/suppliers/SUP-001/production-plans?page=1&limit=10",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "suppliers", "SUP-001", "production-plans"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "10" }
+              ]
+            },
+            "description": "GET daftar production plan dengan pagination."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200 OK', function () { pm.response.to.have.status(200); });",
+                  "pm.test('punya data array', function () { pm.expect(pm.response.json().data).to.be.an('array'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Filter Production Plan status=delayed",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "X-API-Key", "value": "{{api_key}}" }],
+            "url": {
+              "raw": "{{base_url}}/api/v1/suppliers/SUP-001/production-plans?status=delayed",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "suppliers", "SUP-001", "production-plans"],
+              "query": [{ "key": "status", "value": "delayed" }]
+            },
+            "description": "Filter production_status."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200 OK', function () { pm.response.to.have.status(200); });",
+                  "pm.test('semua delayed', function () {",
+                  "  pm.response.json().data.forEach(function (p) { pm.expect(p.production_status).to.eql('delayed'); });",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Detail Production Plan PLAN-001",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "X-API-Key", "value": "{{api_key}}" }],
+            "url": {
+              "raw": "{{base_url}}/api/v1/production-plans/PLAN-001",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "production-plans", "PLAN-001"]
+            },
+            "description": "GET detail plan berdasarkan plan_id."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200 OK', function () { pm.response.to.have.status(200); });",
+                  "pm.test('plan_id = PLAN-001', function () { pm.expect(pm.response.json().data.plan_id).to.eql('PLAN-001'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Tambah Production Plan (POST) → 201",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-API-Key", "value": "{{api_key}}" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"part_number\": \"MJK-BRG-6205\",\n  \"part_name\": \"Bearing 6205 ZZ\",\n  \"production_plan\": \"Weekly Rolling Plan Q2-2026\",\n  \"planned_quantity\": 1200,\n  \"production_date\": \"2026-04-01\",\n  \"production_status\": \"planned\",\n  \"delivery_schedule\": \"2026-04-10\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/suppliers/SUP-001/production-plans",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "suppliers", "SUP-001", "production-plans"]
+            },
+            "description": "POST menambah production plan (butuh bearer token)."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 201 Created', function () { pm.response.to.have.status(201); });",
+                  "pm.test('punya plan_id', function () { pm.expect(pm.response.json().data.plan_id).to.be.a('string'); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "7. Status Code Simulator",
+      "description": "Latihan membaca status code. GET /api/v1/_simulate/:code untuk cepat, atau ?simulate=... pada request nyata.",
+      "item": [
+        {
+          "name": "Simulate 400 Bad Request",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "X-API-Key", "value": "{{api_key}}" }],
+            "url": { "raw": "{{base_url}}/api/v1/_simulate/400", "host": ["{{base_url}}"], "path": ["api", "v1", "_simulate", "400"] },
+            "description": "Contoh 400."
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('Status 400', function () { pm.response.to.have.status(400); });"] } }]
+        },
+        {
+          "name": "Simulate 401 Unauthorized",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "X-API-Key", "value": "{{api_key}}" }],
+            "url": { "raw": "{{base_url}}/api/v1/_simulate/401", "host": ["{{base_url}}"], "path": ["api", "v1", "_simulate", "401"] },
+            "description": "Contoh 401."
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('Status 401', function () { pm.response.to.have.status(401); });"] } }]
+        },
+        {
+          "name": "Simulate 403 Forbidden",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "X-API-Key", "value": "{{api_key}}" }],
+            "url": { "raw": "{{base_url}}/api/v1/_simulate/403", "host": ["{{base_url}}"], "path": ["api", "v1", "_simulate", "403"] },
+            "description": "Contoh 403."
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('Status 403', function () { pm.response.to.have.status(403); });"] } }]
+        },
+        {
+          "name": "Simulate 404 Not Found",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "X-API-Key", "value": "{{api_key}}" }],
+            "url": { "raw": "{{base_url}}/api/v1/_simulate/404", "host": ["{{base_url}}"], "path": ["api", "v1", "_simulate", "404"] },
+            "description": "Contoh 404."
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('Status 404', function () { pm.response.to.have.status(404); });"] } }]
+        },
+        {
+          "name": "Simulate 429 Rate Limited",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "X-API-Key", "value": "{{api_key}}" }],
+            "url": { "raw": "{{base_url}}/api/v1/_simulate/429", "host": ["{{base_url}}"], "path": ["api", "v1", "_simulate", "429"] },
+            "description": "429 biasanya membawa header Retry-After."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 429', function () { pm.response.to.have.status(429); });",
+                  "pm.test('ada Retry-After', function () { pm.expect(pm.response.headers.get('Retry-After')).to.eql('5'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Simulate 500 Internal Error",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "X-API-Key", "value": "{{api_key}}" }],
+            "url": { "raw": "{{base_url}}/api/v1/_simulate/500", "host": ["{{base_url}}"], "path": ["api", "v1", "_simulate", "500"] },
+            "description": "Contoh 500."
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('Status 500', function () { pm.response.to.have.status(500); });"] } }]
+        },
+        {
+          "name": "Simulate error500 via query param",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "X-API-Key", "value": "{{api_key}}" }],
+            "url": {
+              "raw": "{{base_url}}/api/v1/suppliers/SUP-001/stock?simulate=error500",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "suppliers", "SUP-001", "stock"],
+              "query": [{ "key": "simulate", "value": "error500" }]
+            },
+            "description": "Request nyata yang dipaksa 500."
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('Status 500', function () { pm.response.to.have.status(500); });"] } }]
+        },
+        {
+          "name": "Simulate ratelimit via query param",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "X-API-Key", "value": "{{api_key}}" }],
+            "url": {
+              "raw": "{{base_url}}/api/v1/suppliers/SUP-001/stock?simulate=ratelimit",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "suppliers", "SUP-001", "stock"],
+              "query": [{ "key": "simulate", "value": "ratelimit" }]
+            },
+            "description": "Request nyata yang dipaksa 429."
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('Status 429', function () { pm.response.to.have.status(429); });"] } }]
+        }
+      ]
+    }
+  ]
+}

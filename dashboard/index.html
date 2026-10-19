@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Company Internal System — Supplier Integration Dashboard</title>
+  <link rel="stylesheet" href="/dashboard/styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar__brand">
+      <span class="topbar__logo">◧</span>
+      <div>
+        <h1>Company Internal System</h1>
+        <p>Supplier Integration Dashboard</p>
+      </div>
+    </div>
+    <div class="topbar__meta">
+      <span class="pill" id="api-pill">API: <strong id="api-host">—</strong></span>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <section class="controls">
+      <label class="field">
+        <span>Supplier</span>
+        <select id="supplier-select">
+          <option value="SUP-001">SUP-001 — PT Maju Jaya Komponen</option>
+          <option value="SUP-002">SUP-002 — CV Sentosa Parts</option>
+          <option value="SUP-003">SUP-003 — PT Nusantara Elektrik</option>
+        </select>
+      </label>
+      <button id="refresh-btn" class="btn" type="button">↻ Refresh</button>
+      <div class="status-line">
+        <span class="dot" id="status-dot"></span>
+        <span id="status-text">Menghubungkan…</span>
+      </div>
+    </section>
+
+    <section class="cards" aria-label="Ringkasan stock">
+      <article class="card">
+        <span class="card__label">Total Items</span>
+        <span class="card__value" id="stat-total">—</span>
+        <span class="card__hint">part number terdaftar</span>
+      </article>
+      <article class="card card--warn">
+        <span class="card__label">Low Stock</span>
+        <span class="card__value" id="stat-low">—</span>
+        <span class="card__hint">status = low</span>
+      </article>
+      <article class="card card--danger">
+        <span class="card__label">Out of Stock</span>
+        <span class="card__value" id="stat-out">—</span>
+        <span class="card__hint">status = out</span>
+      </article>
+      <article class="card card--ok">
+        <span class="card__label">Available</span>
+        <span class="card__value" id="stat-available">—</span>
+        <span class="card__hint">status = available</span>
+      </article>
+    </section>
+
+    <section class="panel">
+      <div class="panel__head">
+        <h2>Stock Supplier</h2>
+        <span class="sync">Last sync: <strong id="last-sync">—</strong></span>
+      </div>
+
+      <div id="error-state" class="error-state" hidden>
+        <strong>⚠ Tidak bisa terhubung ke sandbox API.</strong>
+        <p>Pastikan server sudah jalan. Di terminal, jalankan:</p>
+        <pre>node sandbox/server/server.js</pre>
+        <p>Lalu klik <em>Refresh</em>. Endpoint: <code id="error-endpoint">—</code></p>
+      </div>
+
+      <div class="table-wrap">
+        <table class="stock-table">
+          <thead>
+            <tr>
+              <th>Part Number</th>
+              <th>Part Name</th>
+              <th class="num">Qty</th>
+              <th>UOM</th>
+              <th>Location</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody id="stock-body">
+            <tr><td colspan="6" class="empty">Memuat data…</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="footnote">
+        Data diambil dari <code>GET /api/v1/suppliers/&lt;id&gt;/stock</code> dengan header
+        <code>X-API-Key</code>. Ini mock Company Dashboard untuk latihan.
+      </p>
+    </section>
+  </main>
+
+  <script src="/dashboard/app.js"></script>
+</body>
+</html>
