@@ -156,6 +156,44 @@
     "last_updated": "2026-01-16T08:25:00+07:00"
   },
   {
+    "supplier_id": "SUP-002",
+    "supplier_name": "CV Sentosa Parts",
+    "part_number": "MJK-GSK-KIT",
+    "part_name": "Gasket Set Kompresor",
+    "stock_quantity": 30,
+    "uom": "PCS",
+    "stock_location": "WH-BDG-01",
+    "stock_status": "available",
+    "unit_price": 95000,
+    "currency": "IDR",
+    "last_updated": "2026-01-19T09:20:00+07:00"
+  },
+  {
+    "supplier_id": "SUP-002",
+    "supplier_name": "CV Sentosa Parts",
+    "part_number": "SNP-BLT-M12",
+    "part_name": "Bolt Hex M12x50",
+    "stock_quantity": 640,
+    "uom": "PCS",
+    "stock_location": "WH-BDG-01",
+    "stock_status": "available",
+    "unit_price": 5400,
+    "currency": "IDR",
+    "last_updated": "2025-12-01T00:00:00+00:00"
+  },
+  {
+    "supplier_id": "SUP-002",
+    "supplier_name": "CV Sentosa Parts",
+    "part_number": "SNP-SEA-2035",
+    "part_name": "Oil Seal 20x35x7",
+    "stock_quantity": 210,
+    "uom": "PCS",
+    "stock_location": "WH-BDG-02",
+    "stock_status": "available",
+    "unit_price": null,
+    "last_updated": "2026-01-22T09:10:00+07:00"
+  },
+  {
     "supplier_id": "SUP-003",
     "supplier_name": "PT Nusantara Elektrik",
     "part_number": "NEK-PLC-S7",
@@ -232,5 +270,44 @@
     "unit_price": 3950000,
     "currency": "IDR",
     "last_updated": "2026-01-21T15:10:00+07:00"
+  },
+  {
+    "supplier_id": "SUP-003",
+    "supplier_name": "PT Nusantara Elektrik",
+    "part_number": "NEK-CBL-4C16",
+    "part_name": "Cable NYY 4x16mm",
+    "stock_quantity": "480",
+    "uom": "METER",
+    "stock_location": null,
+    "stock_status": "available",
+    "unit_price": 125000,
+    "currency": "IDR",
+    "last_updated": "2026-01-23T11:40:00+07:00"
+  },
+  {
+    "supplier_id": "SUP-003",
+    "supplier_name": "PT Nusantara Elektrik",
+    "part_number": "NEK-TRM-25",
+    "part_name": "Terminal Lug 25mm",
+    "stock_quantity": 14,
+    "uom": "PCS",
+    "stock_location": "WH-SBY-02",
+    "stock_status": "out",
+    "unit_price": 3500,
+    "currency": "IDR",
+    "last_updated": "2026-01-24T08:05:00+07:00"
+  },
+  {
+    "supplier_id": "SUP-003",
+    "supplier_name": "PT Nusantara Elektrik",
+    "part_number": "NEK-SEN-PR",
+    "part_name": "Pressure Sensor 0-10bar",
+    "stock_quantity": 18,
+    "uom": "pcs",
+    "stock_location": "WH-SBY-01",
+    "stock_status": "available",
+    "unit_price": 780000,
+    "currency": "IDR",
+    "last_updated": "2026-01-25T10:15:00+07:00"
   }
 ]

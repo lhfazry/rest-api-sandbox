@@ -135,6 +135,16 @@ check "POST stock/bulk (integration sync) -> 201" 201 \
   -d "{\"items\":[{\"part_number\":\"$PART\",\"part_name\":\"Smoke Bulk\",\"stock_quantity\":99,\"uom\":\"PCS\",\"stock_location\":\"WH-JKT-09\",\"stock_status\":\"available\"}]}" \
   "$BASE_URL/api/v1/suppliers/SUP-001/stock/bulk"
 
+check "POST stock/bulk strict (1 item invalid) -> 400" 400 \
+  -X POST -H "Content-Type: application/json" -H "X-API-Key: $API_KEY" -H "Authorization: Bearer $TOKEN" \
+  -d "{\"items\":[{\"part_number\":\"$PART\",\"part_name\":\"Smoke Bulk\",\"stock_quantity\":99,\"uom\":\"PCS\",\"stock_location\":\"WH-JKT-09\",\"stock_status\":\"available\"},{\"part_number\":\"$PART-BAD\",\"part_name\":\"Bad Item\"}]}" \
+  "$BASE_URL/api/v1/suppliers/SUP-001/stock/bulk"
+
+check "POST stock/bulk?mode=partial (1 item invalid) -> 207" 207 \
+  -X POST -H "Content-Type: application/json" -H "X-API-Key: $API_KEY" -H "Authorization: Bearer $TOKEN" \
+  -d "{\"items\":[{\"part_number\":\"$PART\",\"part_name\":\"Smoke Bulk\",\"stock_quantity\":99,\"uom\":\"PCS\",\"stock_location\":\"WH-JKT-09\",\"stock_status\":\"available\"},{\"part_number\":\"$PART-BAD\",\"part_name\":\"Bad Item\"}]}" \
+  "$BASE_URL/api/v1/suppliers/SUP-001/stock/bulk?mode=partial"
+
 check "DELETE stock -> 204" 204 \
   -X DELETE -H "X-API-Key: $API_KEY" -H "Authorization: Bearer $TOKEN" \
   "$BASE_URL/api/v1/suppliers/SUP-001/stock/$PART"

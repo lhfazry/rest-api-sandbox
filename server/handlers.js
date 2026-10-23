@@ -337,10 +337,26 @@ const bulkUpsertStock = (ctx) => {
       normalizedItems.push(withStockDefaults(normalized, supplier));
     }
   });
-  if (allErrors.length > 0) {
+  // ?mode=partial lets the valid items through and reports the rest (207).
+  // Default stays strict/all-or-nothing so existing material and clients keep working.
+  const isPartial = ctx.query && ctx.query.mode === 'partial';
+  if (allErrors.length > 0 && !isPartial) {
     return sendError(ctx.res, 400, 'Sebagian item pada bulk sync tidak valid.', allErrors);
   }
   const result = store.bulkUpsertStock(supplierId, normalizedItems);
+  if (isPartial && allErrors.length > 0) {
+    const failedIndexes = new Set(allErrors.map((e) => e.index));
+    return sendJson(ctx.res, 207, {
+      message: 'Bulk upsert selesai sebagian (partial success).',
+      summary: {
+        received: body.items.length,
+        succeeded: normalizedItems.length,
+        failed: failedIndexes.size,
+      },
+      data: result,
+      errors: allErrors,
+    });
+  }
   sendJson(ctx.res, 201, {
     message: 'Bulk upsert (integration sync) berhasil.',
     data: result,

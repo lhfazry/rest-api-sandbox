@@ -122,7 +122,7 @@ Base URL: `http://localhost:4010`
 | PUT | `/api/v1/suppliers/:supplierId/stock/:partNumber` | API Key + Bearer | Replace penuh → **200** / **404** |
 | PATCH | `/api/v1/suppliers/:supplierId/stock/:partNumber` | API Key + Bearer | Update sebagian → **200** / **404** |
 | DELETE | `/api/v1/suppliers/:supplierId/stock/:partNumber` | API Key + Bearer | Hapus → **204** / **404** |
-| POST | `/api/v1/suppliers/:supplierId/stock/bulk` | API Key + Bearer | **Bulk upsert (integration sync)** → **201** |
+| POST | `/api/v1/suppliers/:supplierId/stock/bulk` | API Key + Bearer | **Bulk upsert** → **201** (semua valid) / **207** (`?mode=partial`: sebagian berhasil) / **400** (strict, ada item invalid) |
 | GET | `/api/v1/suppliers/:supplierId/production-plans` | API Key | Daftar production plan (query: `status`, `page`, `limit`) |
 | GET | `/api/v1/production-plans/:planId` | API Key | Detail plan |
 | POST | `/api/v1/suppliers/:supplierId/production-plans` | API Key + Bearer | Tambah plan → **201** / **400** |
@@ -174,9 +174,10 @@ curl -i "http://localhost:4010/api/v1/_simulate/500" \
 
 | File | Isi |
 |---|---|
-| `data/suppliers.json` | 3 supplier: `SUP-001` PT Maju Jaya Komponen, `SUP-002` CV Sentosa Parts, `SUP-003` PT Nusantara Elektrik |
-| `data/stock.json` | 18 record stock (≥6 per supplier), sudah termasuk status `available`/`low`/`out` |
-| `data/production_plans.json` | 12 record production plan, part number sebagian overlap dengan stock |
+| `data/suppliers.json` | 3 supplier: `SUP-001` PT Maju Jaya Komponen, `SUP-002` CV Sentosa Parts, `SUP-003` PT Nusantara Elektrik (**`inactive`**, anomali A8) |
+| `data/stock.json` | 24 record stock (6/9/9 per supplier), termasuk status `available`/`low`/`out` dan anomali terkontrol |
+| `data/production_plans.json` | 15 record production plan, sebagian sengaja orphan / tanggal tidak logis |
+| `data/ANOMALY-CATALOG.md` | **Trainer only** — daftar anomali + baseline angka yang dikunci materi |
 
 Field stock: `supplier_id`, `supplier_name`, `part_number`, `part_name`, `stock_quantity`, `uom` (`PCS/BOX/METER/SET`),
 `stock_location`, `stock_status` (`available/low/out`), `unit_price`, `currency` (`IDR`), `last_updated`.
@@ -273,4 +274,3 @@ sandbox/
 ├── postman/                  # collection + environment
 └── scripts/smoke-test.sh     # verifikasi end-to-end via curl
 ```
-# rest-api-sandbox

@@ -252,6 +252,13 @@ const spec = {
         security: [{ ApiKeyAuth: [], BearerAuth: [] }],
         parameters: [
           { name: 'supplierId', in: 'path', required: true, schema: { type: 'string' } },
+          {
+            name: 'mode',
+            in: 'query',
+            required: false,
+            description: 'strict (default) = all-or-nothing (400). partial = item valid tetap diproses, sisanya dilaporkan (207).',
+            schema: { type: 'string', enum: ['strict', 'partial'], default: 'strict' },
+          },
         ],
         requestBody: {
           required: true,
@@ -264,7 +271,7 @@ const spec = {
             },
           },
         },
-        responses: { 201: jsonResponse('Bulk sync selesai', { type: 'object' }), 400: errorResponse('Validasi gagal') },
+        responses: { 201: jsonResponse('Bulk sync selesai', { type: 'object' }), 207: jsonResponse('Bulk sync selesai sebagian (mode partial)', { type: 'object' }), 400: errorResponse('Validasi gagal') },
       },
     },
     '/api/v1/suppliers/{supplierId}/production-plans': {
