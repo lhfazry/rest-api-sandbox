@@ -4,7 +4,8 @@
 FROM node:22-alpine
 
 ENV NODE_ENV=production \
-    PORT=4010
+    PORT=4010 \
+    PERSIST_DATA=1
 
 WORKDIR /app
 
@@ -14,6 +15,10 @@ COPY --chown=node:node package.json ./
 COPY --chown=node:node server ./server
 COPY --chown=node:node dashboard ./dashboard
 COPY --chown=node:node data ./data
+
+# The mounted volume root may be owned by root, so only /app/data/store is
+# prepared here (and re-created on demand by data-store.js).
+RUN mkdir -p /app/data/store && chown -R node:node /app/data
 
 # node:* images ship an unprivileged "node" user (uid 1000).
 USER node

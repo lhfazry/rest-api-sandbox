@@ -12,12 +12,21 @@ services:
     environment:
       PORT: "4010"
       NODE_ENV: production
+      # Mutasi (POST/PUT/PATCH/DELETE) disimpan ke volume app_data sehingga
+      # data tetap ada setelah container restart/redeploy.
+      PERSIST_DATA: "1"
       # Magic Coolify variable: deklarasi ini membuat Coolify memasang route
       # domain -> port 4010 secara otomatis (service "app" -> APP).
       # Domain hasil generate bisa diganti di UI menjadi rest-api.rumahcoding.id.
       SERVICE_FQDN_APP_4010:
     # Publikasikan port seperti project Astro yang sudah jalan. Berguna untuk
     # cek langsung: curl http://<ip-server>:4010/health
+    volumes:
+      # Named volume: seed JSON + state.json (hasil POST/PUT/PATCH/DELETE).
+      # Jangan dihapus kalau data ingin tetap ada setelah redeploy.
+      # Hapus volume (Coolify UI -> Persistent Storage, atau
+      # `docker compose down -v`) untuk reset data ke file seed.
+      - app_data:/app/data
     ports:
       - "4010:4010"
     expose:
@@ -41,3 +50,6 @@ services:
       retries: 3
       start_period: 5s
     restart: always
+
+volumes:
+  app_data:

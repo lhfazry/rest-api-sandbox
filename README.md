@@ -8,7 +8,7 @@ Supplier System  →  REST API  →  Company Internal System  →  Company Dashb
 ```
 
 - **Zero dependency**: hanya memakai standard library Node.js. Tidak ada `npm install`.
-- **Data in-memory**: di-load dari `sandbox/data/*.json` saat start, dan **reset tiap server di-restart**.
+- **Data in-memory**: di-load dari `sandbox/data/*.json` saat start, dan **reset tiap server di-restart** (default untuk lokal/kelas). Di Docker/Coolify, dengan volume `app_data`, data hasil mutasi tetap tersimpan setelah restart/redeploy.
 - **Bahasa**: narasi Indonesia, istilah teknis English.
 
 ---
@@ -33,7 +33,7 @@ Setelah jalan, buka:
 
 | URL | Isi |
 |---|---|
-| `http://localhost:4010/` | **Company Dashboard** (mock): tabel stock + summary card |
+| `http://localhost:4010/` | **Company Dashboard** (mock): stock, production planning, dan data supplier |
 | `http://localhost:4010/docs` | Dokumentasi interaktif (Swagger UI + fallback offline) |
 | `http://localhost:4010/openapi.json` | Spesifikasi OpenAPI 3.0 (machine-readable) |
 | `http://localhost:4010/health` | Cek status service (publik) |
@@ -186,6 +186,12 @@ Field production plan: `plan_id`, `supplier_id`, `part_number`, `part_name`, `pr
 
 > Catatan: `plan_id` ditambahkan sebagai identifier unik karena endpoint `GET /api/v1/production-plans/:planId` memerlukannya.
 
+### Persistence di Docker/Coolify
+
+- Set `PERSIST_DATA=1` (sudah default di `Dockerfile` & `docker-compose.yml`) dan mount named volume `app_data` ke `/app/data`.
+- Setiap mutasi (`POST`/`PUT`/`PATCH`/`DELETE`) disimpan ke `data/store/state.json` di dalam volume, lalu di-load ulang saat container restart, sehingga data tetap ada setelah restart/redeploy.
+- Reset ke data seed: `docker compose down -v`, atau hapus volume lewat Coolify UI (**Persistent Storage**).
+
 ### Data untuk latihan
 
 > **Anomali data yang disengaja (bukan data nyata).** Record `MJK-LUB-EP2` milik supplier `SUP-001`
@@ -199,14 +205,41 @@ Field production plan: `plan_id`, `supplier_id`, `part_number`, `part_name`, `pr
 
 ## 6. Cara Kerja Dashboard
 
-`http://localhost:4010/` menampilkan **Company Internal System: Supplier Integration Dashboard**:
+`http://localhost:4010/` menampilkan **Company Internal System: Supplier Integration Dashboard** dengan tiga tab:
 
-1. `app.js` memanggil `GET /api/v1/suppliers/SUP-001/stock?limit=50` dengan header `X-API-Key`.
-2. Dashboard menghitung summary card: **Total Items**, **Low Stock**, **Out of Stock**, **Available**.
-3. Tabel menampilkan part number, part name, qty, uom, location, dan **status badge berwarna**:
-   `available` (hijau), `low` (kuning), `out` (merah).
-4. Ada **supplier selector** (SUP-001..003), tombol **Refresh**, auto-refresh tiap 30 detik, dan **last sync** timestamp.
-5. Jika server mati, dashboard menampilkan **error state** yang menyuruh menjalankan `node sandbox/server/server.js`.
+1. **Stock** — tabel stock supplier. Summary card **Total Items**, **Low Stock**, **Out of Stock**,
+   **Available** dihitung dari baris yang sedang tampil. Filter yang tersedia:
+   - **Status Stock**: `available` / `low` / `out`
+   - **Production Plan**: nama plan supplier, mis. `Weekly Rolling Plan Q1-2026`
+   - **Status Produksi**: `planned` / `in_progress` / `completed` / `delayed`
+   - **Cari Part**: part number atau part name
+
+   Filter production plan dan status produksi menyaring **plan** terlebih dahulu, lalu stock
+   digabungkan lewat `part_number`. Jadi kombinasi `Weekly Rolling Plan Q1-2026` + `delayed`
+   hanya menampilkan part yang punya plan tersebut dengan status delayed. Kolom **Production**
+   menampilkan badge status + nama plan; kolom **Planned Qty** dan **Delivery** muncul saat
+   filter produksi aktif. Filter yang aktif tampil sebagai chip yang bisa dihapus, dan ada
+   tombol **Reset filter**.
+2. **Production Planning** — daftar plan supplier (Plan ID, part, nama plan, planned qty,
+   production date, delivery schedule, status), diurutkan berdasarkan `production_date`.
+   Ada filter status produksi dan summary card **Total Plans**, **In Progress**, **Delayed**,
+   **Completed**.
+3. **Supplier** — semua supplier dari `GET /api/v1/suppliers` beserta negara, kontak, status API,
+   dan jumlah stock/low/out/plan tiap supplier. Baris supplier yang sedang dipilih ditandai
+   **Aktif**; tombol **Pilih** mengganti supplier aktif.
+
+Endpoint yang dipakai dashboard (selalu dengan header `X-API-Key`):
+
+```
+GET /api/v1/suppliers
+GET /api/v1/suppliers/<id>/stock?limit=50&sort=stock_quantity:asc
+GET /api/v1/suppliers/<id>/production-plans?limit=50
+```
+
+Ada **supplier selector** (SUP-001..003), tombol **Refresh**, auto-refresh tiap 30 detik, dan
+**last sync** timestamp. Refresh tidak mereset pilihan filter atau tab. Jika server mati,
+dashboard menampilkan **error state** yang menyuruh menjalankan `node sandbox/server/server.js`;
+jika hanya sebagian request yang gagal, data yang berhasil tetap tampil dengan banner peringatan.
 
 > **Penting untuk peserta:** `API_BASE` dan `API_KEY` di-hardcode di `dashboard/app.js` dengan komentar. Di sistem
 > produksi nyata, API key **tidak boleh** ditulis di frontend: harus lewat backend. Ini contoh demo agar bisa jalan tanpa setup.
