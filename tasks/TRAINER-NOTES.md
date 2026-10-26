@@ -1,6 +1,7 @@
 # TRAINER NOTES — Kunci Penilaian Paket Task
 
 > ⚠️ **Jangan dibagikan ke peserta.** File ini memuat jawaban yang diharapkan, ambang penilaian, dan jebakan yang sengaja dipasang.
+> Ringkasan skenario/goal per task untuk fasilitator: `tasks/TRAINER-OVERVIEW.md`.
 > Dokumen siswa ada di `tasks/T1-*.md` … `tasks/T10-*.md`; index di `tasks/README.md`.
 
 ---

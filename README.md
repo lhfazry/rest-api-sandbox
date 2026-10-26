@@ -314,12 +314,11 @@ Field production plan: `plan_id`, `supplier_id`, `part_number`, `part_name`, `pr
 
 ### Data untuk latihan
 
-> **Anomali data yang disengaja (bukan data nyata).** Record `MJK-LUB-EP2` milik supplier `SUP-001`
-> sengaja dibuat tidak konsisten: `"stock_quantity": 0` tetapi `"stock_status": "available"`.
-> Ini adalah **artefak demo/teaching**, dipakai di latihan untuk mengajarkan *deteksi data-quality &
-> data-mapping*: pertanyaan kelasnya: **“Kalau supplier bilang stok 0 tapi status `available`,
-> ini masalah data mapping siapa?”** Semua record lain tetap wajar (status `out` selalu berarti qty 0).
-> Kalau peserta menemukan keanehan ini, jawabannya memang ada di sini, bukan bug.
+> **Anomali data yang disengaja (bukan data nyata).** Dataset seed memuat beberapa masalah
+> kualitas data: kontradiksi status vs kuantitas, tipe angka yang tidak konsisten, UOM tidak seragam,
+> plan tanpa stok, dan tanggal produksi/kirim yang tidak logis. Ini adalah **artefak demo/teaching**
+> untuk melatih deteksi dan keputusan, bukan bug. Jangan menormalkannya. Daftar lengkap beserta
+> baseline angka ada di `data/ANOMALY-CATALOG.md` (trainer-only).
 
 ---
 
