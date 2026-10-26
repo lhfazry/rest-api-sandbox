@@ -8,7 +8,7 @@ Supplier System  →  REST API  →  Company Internal System  →  Company Dashb
 ```
 
 - **Zero dependency**: hanya memakai standard library Node.js. Tidak ada `npm install`.
-- **Data in-memory**: di-load dari `sandbox/data/*.json` saat start, dan **reset tiap server di-restart** (default untuk lokal/kelas). Di Docker/Coolify, dengan volume `app_data`, data hasil mutasi tetap tersimpan setelah restart/redeploy.
+- **Data in-memory**: di-load dari `data/*.json` saat start, dan **reset tiap server di-restart** (default untuk lokal/kelas). Di Docker/Coolify, dengan volume `app_data`, data hasil mutasi tetap tersimpan setelah restart/redeploy.
 - **Bahasa**: narasi Indonesia, istilah teknis English.
 
 ---
@@ -19,14 +19,13 @@ Prasyarat: **Node.js** terpasang (v18+; repo ini diuji dengan Node v23).
 
 ```bash
 # Dari root repository
-node sandbox/server/server.js
+node server/server.js
 
-# atau via npm (dari folder sandbox/)
-cd sandbox
+# atau via npm (dari root repository)
 npm start
 
 # Port lain (default 4010)
-PORT=4020 node sandbox/server/server.js
+PORT=4020 node server/server.js
 ```
 
 Setelah jalan, buka:
@@ -122,9 +121,14 @@ Base URL: `http://localhost:4010`
 | POST | `/auth/token` | publik | Ambil bearer token |
 | GET | `/docs` | publik | Dokumentasi HTML |
 | GET | `/openapi.json` | publik | OpenAPI 3.0 |
-| GET | `/api/v1/suppliers` | API Key | Daftar supplier `{ data, meta.total }` |
+| GET | `/api/v1/suppliers` | API Key | Daftar supplier `{ data, meta }`. Query: `api_status`, `country`, `q`, `page`, `limit`, `sort` |
 | POST | `/api/v1/suppliers` | API Key + Bearer | Tambah supplier → **201** / **400** / **409** |
 | GET | `/api/v1/suppliers/:supplierId` | API Key | Detail supplier |
+| PUT | `/api/v1/suppliers/:supplierId` | API Key + Bearer | **Full replace supplier** → **200** / **400** / **404** |
+| PATCH | `/api/v1/suppliers/:supplierId` | API Key + Bearer | **Partial update supplier** → **200** / **400** / **404** |
+| PUT | `/api/v1/suppliers/bulk` | API Key + Bearer | **Bulk replace supplier** → **200** / **207** (`?mode=partial`) / **400** / **404** (atomic) |
+| PATCH | `/api/v1/suppliers/bulk` | API Key + Bearer | **Bulk patch supplier** → **200** / **207** (`?mode=partial`) / **400** / **404** (atomic) |
+| GET | `/api/v1/stock` | API Key | Stock **semua supplier**. Query: `supplier_id`, `status`, `part_number`, `q`, `updated_since`, `page`, `limit`, `sort`. `Accept: text/csv` → CSV; `Accept` lain (mis. `application/xml`) → **406** `NOT_ACCEPTABLE` |
 | GET | `/api/v1/suppliers/:supplierId/stock` | API Key | Daftar stock (query: `status`, `page`, `limit`, `updated_since`, `sort`) |
 | GET | `/api/v1/suppliers/:supplierId/stock/:partNumber` | API Key | Detail satu part |
 | POST | `/api/v1/suppliers/:supplierId/stock` | API Key + Bearer | Tambah record → **201** / **400** / **409** |
@@ -134,12 +138,28 @@ Base URL: `http://localhost:4010`
 | POST | `/api/v1/suppliers/:supplierId/stock/bulk` | API Key + Bearer | **Bulk upsert** → **201** (semua valid) / **207** (`?mode=partial`: sebagian berhasil) / **400** (strict, ada item invalid) |
 | PUT | `/api/v1/suppliers/:supplierId/stock/bulk` | API Key + Bearer | **Bulk replace** → **200** (semua item ada & valid) / **207** (`?mode=partial`) / **400** (item invalid) / **404** (ada part tidak ditemukan, atomic) |
 | PATCH | `/api/v1/suppliers/:supplierId/stock/bulk` | API Key + Bearer | **Bulk patch** → **200** / **207** (`?mode=partial`) / **400** / **404** (atomic) |
-| GET | `/api/v1/suppliers/:supplierId/production-plans` | API Key | Daftar production plan (query: `status`, `page`, `limit`) |
+| GET | `/api/v1/suppliers/:supplierId/production-plans` | API Key | Daftar production plan (query: `status`, `updated_since`, `page`, `limit`, `sort`) |
+| GET | `/api/v1/production-plans` | API Key | Plan **semua supplier**. Query: `supplier_id`, `status`, `part_number`, `q`, `updated_since`, `page`, `limit`, `sort` |
 | GET | `/api/v1/production-plans/:planId` | API Key | Detail plan |
 | POST | `/api/v1/suppliers/:supplierId/production-plans` | API Key + Bearer | Tambah plan → **201** / **400** |
+| PUT | `/api/v1/production-plans/:planId` | API Key + Bearer | **Full replace production plan** → **200** / **400** / **404** |
+| PATCH | `/api/v1/production-plans/:planId` | API Key + Bearer | **Partial update production plan** → **200** / **400** / **404** |
+| PUT | `/api/v1/suppliers/:supplierId/production-plans/bulk` | API Key + Bearer | **Bulk replace production plan** → **200** / **207** (`?mode=partial`) / **400** / **404** (atomic) |
+| PATCH | `/api/v1/suppliers/:supplierId/production-plans/bulk` | API Key + Bearer | **Bulk patch production plan** → **200** / **207** (`?mode=partial`) / **400** / **404** (atomic) |
+| POST | `/api/v1/webhooks/subscriptions` | API Key + Bearer | Daftarkan endpoint webhook → **201** (secret `whsec_...` ikut dikembalikan) |
+| GET | `/api/v1/webhooks/subscriptions` | API Key | Daftar subscription `{ data, meta.total }` |
+| DELETE | `/api/v1/webhooks/subscriptions/:subscriptionId` | API Key + Bearer | Hapus subscription → **204** / **404** |
+| POST | `/api/v1/webhooks/subscriptions/:subscriptionId/test` | API Key + Bearer | Kirim event uji `webhook.test` → **202** / **404** |
+| GET | `/api/v1/webhooks/deliveries` | API Key | Log pengiriman, terbaru dulu. Query: `subscription_id`, `status`, `page`, `limit` |
+| GET | `/api/v1/_ratelimit` | API Key | Kuota rate limit milik API key ini (lihat bagian **Rate limit**) |
 | GET | `/api/v1/_simulate/:code` | API Key | Contoh status: `400/401/403/404/429/500` |
 
-**Envelope pagination** (`stock` & `production-plans`):
+**Pagination, filter, sort** (`suppliers`, `stock`, `production-plans`, `webhooks/deliveries`):
+
+- `limit` default **10**, maksimum **50**; `page` mulai dari 1.
+- Filter tersedia per endpoint (lihat tabel): mis. `api_status`, `country`, `q`, `supplier_id`, `status`, `part_number`.
+- `sort=field:asc` atau `sort=field:desc`, contoh `sort=stock_quantity:asc`.
+- `updated_since=<ISO 8601>` mengembalikan record dengan `last_updated` >= nilai itu (untuk sync inkremental).
 
 ```json
 { "data": [ ... ], "meta": { "page": 1, "limit": 10, "total": 6, "total_pages": 1 } }
@@ -152,7 +172,95 @@ Base URL: `http://localhost:4010`
 ```
 
 Peta code: `400 → VALIDATION_ERROR`, `401 → UNAUTHORIZED`, `403 → FORBIDDEN`, `404 → NOT_FOUND`,
-`429 → RATE_LIMITED`, `500 → INTERNAL_SERVER_ERROR`.
+`405 → METHOD_NOT_ALLOWED`, `406 → NOT_ACCEPTABLE`, `409 → CONFLICT`, `429 → RATE_LIMITED`,
+`500 → INTERNAL_SERVER_ERROR`.
+
+### Cache (ETag)
+
+Setiap `GET /api/v1/*` yang membalas **200 JSON** mengirim header `ETag` + `Cache-Control: no-cache`.
+Kirim balik nilainya lewat `If-None-Match` untuk menghemat bandwidth:
+
+```bash
+# 1) Ambil ETag
+ETAG=$(curl -s -D - -o /dev/null \
+  -H "X-API-Key: sup_demo_key_2026" \
+  http://localhost:4010/api/v1/suppliers/SUP-001/stock \
+  | grep -i '^etag:' | tr -d '\r' | sed 's/^[^:]*:[[:space:]]*//')
+
+# 2) Request ulang dengan validator
+curl -i -H "X-API-Key: sup_demo_key_2026" \
+  -H "If-None-Match: $ETAG" \
+  http://localhost:4010/api/v1/suppliers/SUP-001/stock
+# -> 304 Not Modified, body kosong
+```
+
+- ETag dihitung dari *revision* data + method + path + query (urutan query tidak berpengaruh),
+  jadi setiap mutasi otomatis mengubah ETag.
+- **304 hanya untuk 200.** Error (mis. 404) tidak membawa ETag dan tidak pernah dibalas 304.
+- Respons CSV tidak memakai ETag.
+
+### Rate limit
+
+- Default **600 request / 60 detik per API key** (fixed window). Ubah lewat env
+  `RATE_LIMIT_MAX` dan `RATE_LIMIT_WINDOW_MS` (milidetik).
+- Setiap respons `/api/v1/*` membawa `X-RateLimit-Limit`, `X-RateLimit-Remaining`,
+  dan `X-RateLimit-Reset` (epoch detik).
+- Kuota habis → **429** `RATE_LIMITED` + header `Retry-After` (detik).
+- Hanya request `/api/v1/*` dengan API key valid yang dihitung. `/health`, `/auth/token`,
+  `/docs`, `/openapi.json`, dan dashboard **tidak** dihitung; request tanpa API key (401)
+  juga tidak memotong kuota.
+- Cek kuota berjalan: `GET /api/v1/_ratelimit`:
+
+```json
+{
+  "data": {
+    "limit": 600,
+    "window_ms": 60000,
+    "window_started_at": "2026-10-26T04:00:00.000Z",
+    "used": 12,
+    "remaining": 588,
+    "reset_at": "2026-10-26T04:01:00.000Z"
+  }
+}
+```
+
+`?simulate=ratelimit` tetap tersedia untuk demo 429 tanpa menghabiskan kuota nyata.
+
+### Idempotency-Key
+
+Kirim header `Idempotency-Key` pada `POST`/`PUT`/`PATCH`/`DELETE /api/v1/*` supaya retry aman:
+
+```bash
+curl -X POST http://localhost:4010/api/v1/suppliers \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: sup_demo_key_2026" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Idempotency-Key: demo-supplier-001" \
+  -d '{"supplier_id":"SUP-010","supplier_name":"PT Idempotent"}'
+```
+
+- Request pertama dijalankan normal (mis. **201**). Request ulang dengan key + body **sama**
+  tidak membuat data baru: server membalas status & body yang sama plus `Idempotency-Replayed: true`.
+- Key sama + body **berbeda** (method & path sama) → **409** `IDEMPOTENCY_KEY_REUSED`.
+- Cakupan: key + method + path (query string diabaikan). Respons **429** dan **5xx** tidak di-cache
+  karena hasilnya belum pasti/transien.
+- Memori **24 jam** dan in-memory: restart server menghapus semua key.
+
+### Webhooks
+
+Sandbox mengirim notifikasi keluar saat data berubah, supaya alur integrasi bisa diuji end-to-end.
+
+- Event yang bisa didaftarkan: `stock.created`, `stock.updated`, `stock.deleted`,
+  `plan.created`, `plan.updated`. Event `webhook.test` hanya dikirim lewat endpoint `/test`.
+- Subscription disimpan **in-memory** (hilang saat restart) dan membawa `secret` `whsec_...`.
+- Setiap pengiriman adalah `POST` JSON ke `url` dengan header `X-Sandbox-Event`,
+  `X-Sandbox-Delivery`, dan
+  `X-Sandbox-Signature: t=<unixSeconds>,v1=<hex HMAC-SHA256 dari string "<t>.<rawBody>" memakai secret>`.
+- Retry: maksimal **3 percobaan** (timeout 3 detik per percobaan), jeda **1 detik** lalu **2 detik**;
+  status akhir `delivered` atau `failed`.
+- Pengiriman berjalan di **background**: respons API tidak menunggu penerima. Log ada di
+  `GET /api/v1/webhooks/deliveries` (terbaru dulu, filter `subscription_id` & `status`).
+- Uji cepat: `POST /api/v1/webhooks/subscriptions/<id>/test` → **202** dengan `delivery_id`.
 
 ---
 
@@ -250,7 +358,7 @@ GET /api/v1/suppliers/<id>/production-plans?limit=50
 
 Ada **supplier selector** (SUP-001..003), tombol **Refresh**, auto-refresh tiap 30 detik, dan
 **last sync** timestamp. Refresh tidak mereset pilihan filter atau tab. Jika server mati,
-dashboard menampilkan **error state** yang menyuruh menjalankan `node sandbox/server/server.js`;
+dashboard menampilkan **error state** yang menyuruh menjalankan `node server/server.js`;
 jika hanya sebagian request yang gagal, data yang berhasil tetap tampil dengan banner peringatan.
 
 > **Penting untuk peserta:** `API_BASE` dan `API_KEY` di-hardcode di `dashboard/app.js` dengan komentar. Di sistem
@@ -260,7 +368,7 @@ jika hanya sebagian request yang gagal, data yang berhasil tetap tampil dengan b
 
 ## 7. Postman
 
-Import dua file dari `sandbox/postman/`:
+Import dua file dari `postman/`:
 
 1. `supplier-api.postman_collection.json`: 7 folder: Health, Authentication, Suppliers, Stock (Read), Stock (Write),
    Production Planning, Status Code Simulator. Setiap request punya `pm.test` yang meng-assert status code.
@@ -273,15 +381,23 @@ test script-nya otomatis menyimpan `access_token` ke collection variable `{{toke
 
 ## 8. Smoke Test
 
-Memverifikasi semua endpoint sekaligus (server harus sudah jalan):
+Memverifikasi **67 pengecekan** end-to-end (server harus sudah jalan):
 
 ```bash
-bash sandbox/scripts/smoke-test.sh
+bash scripts/smoke-test.sh
 # atau ke port lain:
-BASE_URL=http://localhost:4020 bash sandbox/scripts/smoke-test.sh
+BASE_URL=http://localhost:4020 bash scripts/smoke-test.sh
 ```
 
-Output: `PASS`/`FAIL` per pengecekan beserta HTTP status code, dan ringkasan di akhir.
+Output: `PASS`/`FAIL` per pengecekan beserta HTTP status code, dan ringkasan di akhir
+(`ALL PASS  67/67 checks passed`). Cakupannya: health, auth, suppliers, stock, production plan,
+global stock + CSV/406, cache ETag/304, rate limit, idempotency, webhooks, 405, simulator,
+serta docs/dashboard.
+
+> Script ini **memutasi data**: membuat supplier `SUP-SMOKE-*` dan `SUP-SMK-*`, satu record stock
+> `SMOKE-*`, satu production plan, dan satu webhook subscription (dihapus lagi di akhir; delivery-nya
+> tetap tercatat in-memory). Restart server sebelum demo bersih. Karena `Idempotency-Key` memakai
+> `$$` (PID shell), script aman dijalankan ulang tanpa tabrakan.
 
 ---
 
@@ -289,8 +405,8 @@ Output: `PASS`/`FAIL` per pengecekan beserta HTTP status code, dan ringkasan di 
 
 | Masalah | Penyebab | Solusi |
 |---|---|---|
-| `EADDRINUSE` / port 4010 dipakai | Ada proses lain di port 4010 | Jalankan `PORT=4020 node sandbox/server/server.js`, atau hentikan proses lama: `lsof -ti:4010 \| xargs kill` |
-| Dashboard “Tidak bisa terhubung” | Server belum jalan | Jalankan `node sandbox/server/server.js`, lalu klik **Refresh** |
+| `EADDRINUSE` / port 4010 dipakai | Ada proses lain di port 4010 | Jalankan `PORT=4020 node server/server.js`, atau hentikan proses lama: `lsof -ti:4010 \| xargs kill` |
+| Dashboard “Tidak bisa terhubung” | Server belum jalan | Jalankan `node server/server.js`, lalu klik **Refresh** |
 | Dashboard kosong / CORS error | Membuka `index.html` lewat `file://` | Buka lewat `http://localhost:4010/`, **bukan** file langsung |
 | `/docs` tidak menampilkan Swagger UI | Tidak ada internet (CDN diblok) | Tidak masalah: daftar endpoint fallback tetap tampil di halaman |
 | Postman dapat **401** | Lupa `X-API-Key` atau salah nilai | Tambahkan `X-API-Key: sup_demo_key_2026` |
@@ -299,19 +415,23 @@ Output: `PASS`/`FAIL` per pengecekan beserta HTTP status code, dan ringkasan di 
 
 ---
 
-## 10. Struktur Folder sandbox/
+## 10. Struktur Folder
 
 ```
-sandbox/
+.
 ├── package.json              # hanya script "start": tanpa dependencies
 ├── README.md
+├── AGENTS.md
 ├── server/
-│   ├── server.js             # http server, router, CORS, logger, banner
+│   ├── server.js             # http server, router, CORS, middleware, banner
 │   ├── handlers.js           # logika bisnis tiap endpoint
-│   ├── data-store.js         # loader + store in-memory
+│   ├── data-store.js         # loader + store in-memory (+ filter/pagination/sort)
 │   ├── auth.js               # API key + bearer/readonly-token
+│   ├── ratelimit.js          # fixed-window rate limit per API key
+│   ├── idempotency.js        # Idempotency-Key (replay + 409)
+│   ├── webhooks.js           # subscription, delivery worker, signature
 │   ├── simulate.js           # simulator status code & latency
-│   ├── errors.js             # error body standar + helper kirim JSON
+│   ├── errors.js             # error body standar + helper kirim JSON/ETag
 │   ├── openapi.js            # spesifikasi OpenAPI 3.0
 │   └── docs.js               # halaman /docs (Swagger UI + fallback)
 ├── data/                     # seed JSON (suppliers, stock, production_plans)

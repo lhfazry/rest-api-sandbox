@@ -7,23 +7,37 @@
  * and mirrors what a real API gateway does:
  *   1. CORS + OPTIONS preflight
  *   2. Route matching
- *   3. Auth (API key always; bearer token for writes)
- *   4. Body parsing
- *   5. Status-code simulation (?simulate=...)
- *   6. Handler
+ *   3. API-key auth (every /api/v1/*), then rate limiting, then bearer auth
+ *      for writes. Rate limiting sits after the API key so a 429 is always
+ *      attributable to a valid caller; a write without a bearer token still
+ *      carries X-RateLimit-* headers because the API key already passed.
+ *   4. Body parsing (raw body kept for the idempotency hash)
+ *   5. Idempotency-Key replay/mismatch check (writes only)
+ *   6. Status-code simulation (?simulate=...)
+ *   7. Conditional-GET metadata (ETag candidates for successful JSON /api/v1 GETs)
+ *   8. Handler (which may answer 304 via sendJson)
  * Every finished response is logged as: METHOD path -> status (Xms).
  */
 
 const http = require('node:http');
 const fs = require('node:fs');
 const path = require('node:path');
+const crypto = require('node:crypto');
 
 const { sendJson, sendError } = require('./errors');
-const { enforceAuth } = require('./auth');
+const { checkApiKey, checkBearer } = require('./auth');
 const { applySimulation } = require('./simulate');
+const {
+  enforceRateLimit,
+  LIMIT: RATE_LIMIT_MAX,
+  WINDOW_MS: RATE_LIMIT_WINDOW_MS,
+} = require('./ratelimit');
+const { applyIdempotency, isIdempotentMethod } = require('./idempotency');
 const { spec } = require('./openapi');
 const { buildDocsHtml } = require('./docs');
+const store = require('./data-store');
 const handlers = require('./handlers');
+const webhooks = require('./webhooks');
 
 const PORT = parseInt(process.env.PORT, 10) || 4010;
 const DASHBOARD_DIR = path.join(__dirname, '..', 'dashboard');
@@ -41,7 +55,14 @@ const ROUTES = [
 
   { method: 'GET', pattern: '/api/v1/suppliers', handler: handlers.listSuppliers },
   { method: 'POST', pattern: '/api/v1/suppliers', handler: handlers.createSupplier, write: true },
+  // Global stock list (all suppliers), JSON or CSV depending on Accept.
+  { method: 'GET', pattern: '/api/v1/stock', handler: handlers.listAllStock },
+  // Bulk supplier routes must come BEFORE the :supplierId pattern.
+  { method: 'PUT', pattern: '/api/v1/suppliers/bulk', handler: handlers.bulkReplaceSuppliers, write: true },
+  { method: 'PATCH', pattern: '/api/v1/suppliers/bulk', handler: handlers.bulkPatchSuppliers, write: true },
   { method: 'GET', pattern: '/api/v1/suppliers/:supplierId', handler: handlers.getSupplier },
+  { method: 'PUT', pattern: '/api/v1/suppliers/:supplierId', handler: handlers.replaceSupplier, write: true },
+  { method: 'PATCH', pattern: '/api/v1/suppliers/:supplierId', handler: handlers.patchSupplier, write: true },
 
   { method: 'GET', pattern: '/api/v1/suppliers/:supplierId/stock', handler: handlers.listStock },
   { method: 'POST', pattern: '/api/v1/suppliers/:supplierId/stock', handler: handlers.createStock, write: true },
@@ -55,9 +76,23 @@ const ROUTES = [
 
   { method: 'GET', pattern: '/api/v1/suppliers/:supplierId/production-plans', handler: handlers.listProductionPlans },
   { method: 'POST', pattern: '/api/v1/suppliers/:supplierId/production-plans', handler: handlers.createProductionPlan, write: true },
+  { method: 'PUT', pattern: '/api/v1/suppliers/:supplierId/production-plans/bulk', handler: handlers.bulkReplaceProductionPlans, write: true },
+  { method: 'PATCH', pattern: '/api/v1/suppliers/:supplierId/production-plans/bulk', handler: handlers.bulkPatchProductionPlans, write: true },
+  // Literal global plan list must come BEFORE the :planId pattern.
+  { method: 'GET', pattern: '/api/v1/production-plans', handler: handlers.listAllProductionPlans },
   { method: 'GET', pattern: '/api/v1/production-plans/:planId', handler: handlers.getProductionPlan },
+  { method: 'PUT', pattern: '/api/v1/production-plans/:planId', handler: handlers.replaceProductionPlan, write: true },
+  { method: 'PATCH', pattern: '/api/v1/production-plans/:planId', handler: handlers.patchProductionPlan, write: true },
+
+  // Webhooks: literal routes first, then the :subscriptionId patterns.
+  { method: 'GET', pattern: '/api/v1/webhooks/subscriptions', handler: handlers.listWebhookSubscriptions },
+  { method: 'POST', pattern: '/api/v1/webhooks/subscriptions', handler: handlers.createWebhookSubscription, write: true },
+  { method: 'GET', pattern: '/api/v1/webhooks/deliveries', handler: handlers.listWebhookDeliveries },
+  { method: 'POST', pattern: '/api/v1/webhooks/subscriptions/:subscriptionId/test', handler: handlers.testWebhookSubscription, write: true },
+  { method: 'DELETE', pattern: '/api/v1/webhooks/subscriptions/:subscriptionId', handler: handlers.deleteWebhookSubscription, write: true },
 
   { method: 'GET', pattern: '/api/v1/_simulate/:code', handler: handlers.simulateCode },
+  { method: 'GET', pattern: '/api/v1/_ratelimit', handler: handlers.getRateLimit },
 ];
 
 // Pre-compile each pattern into a RegExp with named capture groups.
@@ -164,6 +199,33 @@ function readBody(req) {
   });
 }
 
+// ---- ETag / conditional GET ---------------------------------------------
+
+/**
+ * Canonical query string: parameters sorted by key so that
+ * ?a=1&b=2 and ?b=2&a=1 produce the same ETag.
+ */
+function canonicalQuery(searchParams) {
+  const pairs = Array.from(searchParams.entries()).sort((a, b) =>
+    a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0
+  );
+  return pairs.map(([key, value]) => `${key}=${value}`).join('&');
+}
+
+/**
+ * Strong ETag over (data revision, method, path, sorted query). Any mutation
+ * bumps the revision, so cached bodies are invalidated automatically.
+ */
+function computeEtag(revision, method, pathname, searchParams) {
+  const digest = crypto
+    .createHash('sha1')
+    .update(`${revision}:${method}:${pathname}:${canonicalQuery(searchParams)}`)
+    .digest('hex');
+  return `"${digest}"`;
+}
+
+// (If-None-Match matching now lives in errors.js, next to the 304 decision.)
+
 // ---- CORS + logging -----------------------------------------------------
 
 function applyCors(res) {
@@ -171,7 +233,12 @@ function applyCors(res) {
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
   res.setHeader(
     'Access-Control-Allow-Headers',
-    'Content-Type, X-API-Key, Authorization, X-Simulate'
+    'Content-Type, X-API-Key, Authorization, X-Simulate, Idempotency-Key'
+  );
+  // Browser JS can read these response headers (pagination, caching, throttling).
+  res.setHeader(
+    'Access-Control-Expose-Headers',
+    'X-Total-Count, ETag, X-RateLimit-Limit, X-RateLimit-Remaining, X-RateLimit-Reset, Retry-After, Idempotency-Replayed'
   );
   res.setHeader('Access-Control-Max-Age', '600');
 }
@@ -224,27 +291,63 @@ const server = http.createServer(async (req, res) => {
 
   const { route, params } = matched;
   const baseUrl = `${req.headers['x-forwarded-proto'] || 'http'}://${req.headers.host || `localhost:${PORT}`}`;
-  const ctx = { req, res, query, params, body: null, baseUrl };
+  const ctx = { req, res, query, params, body: null, rawBody: '', baseUrl };
 
   try {
-    // 4. Auth for /api/v1/* routes.
+    // 4. API-key auth, then rate limiting, then bearer auth for writes.
+    //    The split matters: a write without a bearer token is still a valid
+    //    caller (API key OK), so its 401 must carry X-RateLimit-* headers.
     if (!route.public && pathname.startsWith('/api/v1')) {
-      if (enforceAuth(req, res, Boolean(route.write))) return;
+      const api = checkApiKey(req);
+      if (!api.ok) return sendError(res, api.status, api.message);
+
+      // 4b. Every authenticated /api/v1 request counts — 304, 404, 406, 429,
+      //     _simulate/* and _ratelimit included. A 429 consumes quota too.
+      const limitResult = enforceRateLimit(req, res);
+      ctx.rateLimit = limitResult.snapshot;
+      if (limitResult.blocked) return;
+
+      // 4c. Write scope.
+      if (route.write) {
+        const bearer = checkBearer(req);
+        if (!bearer.ok) return sendError(res, bearer.status, bearer.message);
+      }
     }
 
-    // 5. Parse JSON body for mutating methods.
-    if (['POST', 'PUT', 'PATCH'].includes(method)) {
+    // 5. Parse the body. The raw text is kept for the Idempotency-Key hash.
+    if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) {
       const raw = await readBody(req);
-      if (raw.trim() !== '') {
-        try {
-          ctx.body = JSON.parse(raw);
-        } catch {
-          return sendError(res, 400, 'Body request bukan JSON yang valid.', [
-            { field: 'body', issue: 'JSON parse error' },
-          ]);
+      ctx.rawBody = raw;
+      // DELETE has no JSON contract; only hash its (usually empty) body.
+      if (method !== 'DELETE') {
+        if (raw.trim() !== '') {
+          try {
+            ctx.body = JSON.parse(raw);
+          } catch {
+            return sendError(res, 400, 'Body request bukan JSON yang valid.', [
+              { field: 'body', issue: 'JSON parse error' },
+            ]);
+          }
+        } else {
+          ctx.body = {};
         }
-      } else {
-        ctx.body = {};
+      }
+    }
+
+    // 5b. Idempotency-Key (writes only). Runs BEFORE ?simulate and the handler:
+    //     a replay returns the cached response and never mutates the store.
+    if (pathname.startsWith('/api/v1') && isIdempotentMethod(method)) {
+      const rawKey = req.headers['idempotency-key'];
+      const key = typeof rawKey === 'string' ? rawKey.trim() : '';
+      if (key !== '') {
+        const handled = applyIdempotency({
+          res,
+          method,
+          pathname,
+          key,
+          rawBody: ctx.rawBody,
+        });
+        if (handled) return;
       }
     }
 
@@ -254,7 +357,28 @@ const server = http.createServer(async (req, res) => {
       if (handled) return;
     }
 
-    // 7. Business handler.
+    // 7. Conditional-GET metadata for JSON responses under /api/v1.
+    //    The ETag is computed here from the current revision, but the 304
+    //    decision belongs to sendJson AFTER the handler has chosen the status:
+    //    the pre-handler short-circuit used to answer 304 for resources that
+    //    do not exist (404). Errors now never carry an ETag and never get 304.
+    //    CSV output is excluded (its ETag would not describe the CSV body).
+    if (method === 'GET' && pathname.startsWith('/api/v1')) {
+      const { csv } = handlers.negotiateStockAccept(req.headers.accept);
+      if (!(pathname === '/api/v1/stock' && csv)) {
+        // Webhook lists live outside the supplier store, so their ETag must also
+        // track the webhook revision (a created delivery changes the body).
+        const webhookTag = pathname.startsWith('/api/v1/webhooks/')
+          ? `:wh-${webhooks.getRevision()}`
+          : '';
+        res._conditional = {
+          etag: computeEtag(`${store.getRevision()}${webhookTag}`, method, pathname, url.searchParams),
+          ifNoneMatch: req.headers['if-none-match'],
+        };
+      }
+    }
+
+    // 8. Business handler.
     await route.handler(ctx);
   } catch (err) {
     if (String(err && err.message) === 'PAYLOAD_TOO_LARGE') {
@@ -287,13 +411,23 @@ function printBanner() {
   console.log(`    POST   ${base}/auth/token`);
   console.log(`    GET    ${base}/api/v1/suppliers`);
   console.log(`    POST   ${base}/api/v1/suppliers`);
+  console.log(`    PUT    ${base}/api/v1/suppliers/bulk`);
+  console.log(`    PATCH  ${base}/api/v1/suppliers/bulk`);
   console.log(`    GET    ${base}/api/v1/suppliers/SUP-001/stock?page=1&limit=5`);
   console.log(`    POST   ${base}/api/v1/suppliers/SUP-001/stock`);
   console.log(`    POST   ${base}/api/v1/suppliers/SUP-001/stock/bulk`);
   console.log(`    PUT    ${base}/api/v1/suppliers/SUP-001/stock/bulk`);
   console.log(`    PATCH  ${base}/api/v1/suppliers/SUP-001/stock/bulk`);
   console.log(`    GET    ${base}/api/v1/suppliers/SUP-001/production-plans`);
+  console.log(`    PUT    ${base}/api/v1/suppliers/SUP-001/production-plans/bulk`);
+  console.log(`    PATCH  ${base}/api/v1/suppliers/SUP-001/production-plans/bulk`);
+  console.log(`    POST   ${base}/api/v1/webhooks/subscriptions`);
+  console.log(`    GET    ${base}/api/v1/webhooks/deliveries`);
   console.log(`    GET    ${base}/api/v1/_simulate/500`);
+  console.log(`    GET    ${base}/api/v1/_ratelimit`);
+  console.log('');
+  console.log(`  Rate limit : ${RATE_LIMIT_MAX} req / ${RATE_LIMIT_WINDOW_MS} ms per API key (X-RateLimit-*)`);
+  console.log('  Idempotency: Idempotency-Key pada POST/PUT/PATCH/DELETE /api/v1/*');
   console.log('');
   console.log('  Simulator: ?simulate=latency&ms=2000 | error500 | timeout | ratelimit | malformed');
   console.log(`${line}\n`);

@@ -8,7 +8,9 @@
   "variable": [
     { "key": "base_url", "value": "http://localhost:4010", "type": "string" },
     { "key": "api_key", "value": "sup_demo_key_2026", "type": "string" },
-    { "key": "token", "value": "", "type": "string" }
+    { "key": "token", "value": "", "type": "string" },
+    { "key": "etag", "value": "", "type": "string" },
+    { "key": "wh_id", "value": "", "type": "string" }
   ],
   "item": [
     {
@@ -191,6 +193,122 @@
                   "if (pm.response.code === 201) {",
                   "  pm.test('supplier_id = SUP-004', function () { pm.expect(pm.response.json().data.supplier_id).to.eql('SUP-004'); });",
                   "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Replace Supplier (PUT) → 200",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-API-Key", "value": "{{api_key}}" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"supplier_id\": \"SUP-003\",\n  \"supplier_name\": \"PT Nusantara Elektrik (Revisi)\",\n  \"country\": \"Indonesia\",\n  \"contact_email\": \"integration@nusantara-elektrik.co.id\",\n  \"api_status\": \"active\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/api/v1/suppliers/SUP-003", "host": ["{{base_url}}"], "path": ["api", "v1", "suppliers", "SUP-003"] },
+            "description": "PUT full replace supplier. Identity dari path; body tidak boleh mengganti supplier_id."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200 OK', function () { pm.response.to.have.status(200); });",
+                  "pm.test('supplier_name berubah', function () { pm.expect(pm.response.json().data.supplier_name).to.eql('PT Nusantara Elektrik (Revisi)'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Patch Supplier (PATCH) → 200",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-API-Key", "value": "{{api_key}}" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"contact_email\": \"ops@nusantara-elektrik.co.id\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/api/v1/suppliers/SUP-003", "host": ["{{base_url}}"], "path": ["api", "v1", "suppliers", "SUP-003"] },
+            "description": "PATCH partial update supplier: hanya field yang dikirim yang berubah."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200 OK', function () { pm.response.to.have.status(200); });",
+                  "pm.test('contact_email berubah', function () { pm.expect(pm.response.json().data.contact_email).to.eql('ops@nusantara-elektrik.co.id'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Bulk Replace Suppliers (PUT) → 200",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-API-Key", "value": "{{api_key}}" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"items\": [\n    {\n      \"supplier_id\": \"SUP-001\",\n      \"supplier_name\": \"PT Maju Jaya Komponen\",\n      \"country\": \"Indonesia\",\n      \"contact_email\": \"procurement@majujaya.co.id\",\n      \"api_status\": \"active\"\n    },\n    {\n      \"supplier_id\": \"SUP-002\",\n      \"supplier_name\": \"CV Sentosa Parts\",\n      \"country\": \"Indonesia\",\n      \"contact_email\": \"sales@sentosaparts.co.id\",\n      \"api_status\": \"active\"\n    }\n  ]\n}"
+            },
+            "url": { "raw": "{{base_url}}/api/v1/suppliers/bulk", "host": ["{{base_url}}"], "path": ["api", "v1", "suppliers", "bulk"] },
+            "description": "PUT bulk replace supplier: hanya meng-update supplier yang SUDAH ADA (tidak pernah membuat baru). 200 / 207 (?mode=partial) / 400 / 404."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200 OK', function () { pm.response.to.have.status(200); });",
+                  "pm.test('2 supplier terupdate', function () { pm.expect(pm.response.json().data.updated).to.eql(2); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Bulk Patch Suppliers (PATCH) → 200",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-API-Key", "value": "{{api_key}}" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"items\": [\n    {\n      \"supplier_id\": \"SUP-001\",\n      \"country\": \"Indonesia\"\n    },\n    {\n      \"supplier_id\": \"SUP-002\",\n      \"contact_email\": \"sales@sentosaparts.co.id\"\n    }\n  ]\n}"
+            },
+            "url": { "raw": "{{base_url}}/api/v1/suppliers/bulk", "host": ["{{base_url}}"], "path": ["api", "v1", "suppliers", "bulk"] },
+            "description": "PATCH bulk patch supplier: hanya mengubah field yang dikirim pada supplier yang SUDAH ADA. 200 / 207 (?mode=partial) / 400 / 404."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200 OK', function () { pm.response.to.have.status(200); });",
+                  "pm.test('2 supplier terupdate', function () { pm.expect(pm.response.json().data.updated).to.eql(2); });"
                 ]
               }
             }
@@ -794,6 +912,138 @@
               }
             }
           ]
+        },
+        {
+          "name": "Replace Production Plan (PUT) → 200",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-API-Key", "value": "{{api_key}}" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"plan_id\": \"PLAN-004\",\n  \"part_number\": \"MJK-GSK-KIT\",\n  \"part_name\": \"Gasket Set Kompresor\",\n  \"production_plan\": \"Monthly Master Plan Q1-2026\",\n  \"planned_quantity\": 175,\n  \"production_date\": \"2026-01-30\",\n  \"production_status\": \"in_progress\",\n  \"delivery_schedule\": \"2026-02-07\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/production-plans/PLAN-004",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "production-plans", "PLAN-004"]
+            },
+            "description": "PUT full replace production plan. plan_id/supplier_id tidak boleh berubah."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200 OK', function () { pm.response.to.have.status(200); });",
+                  "pm.test('production_status berubah', function () { pm.expect(pm.response.json().data.production_status).to.eql('in_progress'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Patch Production Plan (PATCH) → 200",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-API-Key", "value": "{{api_key}}" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"production_status\": \"completed\",\n  \"delivery_schedule\": \"2026-02-06\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/production-plans/PLAN-003",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "production-plans", "PLAN-003"]
+            },
+            "description": "PATCH partial update production plan: hanya field yang dikirim yang berubah."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200 OK', function () { pm.response.to.have.status(200); });",
+                  "pm.test('production_status = completed', function () { pm.expect(pm.response.json().data.production_status).to.eql('completed'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Bulk Replace Production Plans (PUT) → 200",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-API-Key", "value": "{{api_key}}" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"items\": [\n    {\n      \"plan_id\": \"PLAN-001\",\n      \"supplier_id\": \"SUP-001\",\n      \"part_number\": \"MJK-BRG-6205\",\n      \"part_name\": \"Bearing 6205 ZZ\",\n      \"production_plan\": \"Weekly Rolling Plan Q1-2026\",\n      \"planned_quantity\": 1100,\n      \"production_date\": \"2026-02-02\",\n      \"production_status\": \"in_progress\",\n      \"delivery_schedule\": \"2026-02-10\"\n    },\n    {\n      \"plan_id\": \"PLAN-002\",\n      \"supplier_id\": \"SUP-001\",\n      \"part_number\": \"MJK-SEA-2040\",\n      \"part_name\": \"Oil Seal 20x40x7\",\n      \"production_plan\": \"Weekly Rolling Plan Q1-2026\",\n      \"planned_quantity\": 550,\n      \"production_date\": \"2026-02-04\",\n      \"production_status\": \"planned\",\n      \"delivery_schedule\": \"2026-02-12\"\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/suppliers/SUP-001/production-plans/bulk",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "suppliers", "SUP-001", "production-plans", "bulk"]
+            },
+            "description": "PUT bulk replace production plan: hanya meng-update plan milik supplier di path (tidak pernah membuat baru). 200 / 207 (?mode=partial) / 400 / 404."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200 OK', function () { pm.response.to.have.status(200); });",
+                  "pm.test('2 plan terupdate', function () { pm.expect(pm.response.json().data.updated).to.eql(2); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Bulk Patch Production Plans (PATCH) → 200",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-API-Key", "value": "{{api_key}}" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"items\": [\n    {\n      \"plan_id\": \"PLAN-001\",\n      \"production_status\": \"completed\"\n    },\n    {\n      \"plan_id\": \"PLAN-002\",\n      \"delivery_schedule\": \"2026-02-15\"\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/suppliers/SUP-001/production-plans/bulk",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "suppliers", "SUP-001", "production-plans", "bulk"]
+            },
+            "description": "PATCH bulk patch production plan: hanya mengubah field yang dikirim pada plan milik supplier di path. 200 / 207 (?mode=partial) / 400 / 404."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200 OK', function () { pm.response.to.have.status(200); });",
+                  "pm.test('2 plan terupdate', function () { pm.expect(pm.response.json().data.updated).to.eql(2); });"
+                ]
+              }
+            }
+          ]
         }
       ]
     },
@@ -901,6 +1151,506 @@
             "description": "Request nyata yang dipaksa 429."
           },
           "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('Status 429', function () { pm.response.to.have.status(429); });"] } }]
+        }
+      ]
+    },
+    {
+      "name": "8. Global Reads (lintas supplier)",
+      "description": "Membaca stock, production plan, dan supplier lintas supplier sekaligus. Semua request di folder ini read-only (butuh X-API-Key) dan tidak mengubah data.",
+      "item": [
+        {
+          "name": "Daftar Stock Global (filter supplier_id + status)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "X-API-Key", "value": "{{api_key}}" }],
+            "url": {
+              "raw": "{{base_url}}/api/v1/stock?supplier_id=SUP-001&status=available&limit=5&sort=part_number:asc",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "stock"],
+              "query": [
+                { "key": "supplier_id", "value": "SUP-001" },
+                { "key": "status", "value": "available" },
+                { "key": "limit", "value": "5" },
+                { "key": "sort", "value": "part_number:asc" }
+              ]
+            },
+            "description": "GET /api/v1/stock — stock dari semua supplier dalam satu panggilan. Filter: supplier_id, status, part_number, q, updated_since, page, limit, sort. Butuh X-API-Key, tidak mengubah data."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200 OK', function () { pm.response.to.have.status(200); });",
+                  "pm.test('meta.limit = 5', function () { pm.expect(pm.response.json().meta.limit).to.eql(5); });",
+                  "pm.test('semua baris milik SUP-001', function () {",
+                  "  pm.response.json().data.forEach(function (r) { pm.expect(r.supplier_id).to.eql('SUP-001'); });",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Daftar Stock Global sebagai CSV (Accept: text/csv)",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Accept", "value": "text/csv" },
+              { "key": "X-API-Key", "value": "{{api_key}}" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/stock?limit=5",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "stock"],
+              "query": [{ "key": "limit", "value": "5" }]
+            },
+            "description": "GET /api/v1/stock dengan header Accept: text/csv — server membalas CSV (RFC4180) plus X-Total-Count dan Content-Disposition. Butuh X-API-Key, tidak mengubah data."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200 OK', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Content-Type text/csv', function () { pm.expect(pm.response.headers.get('Content-Type')).to.include('text/csv'); });",
+                  "pm.test('ada X-Total-Count', function () { pm.expect(pm.response.headers.get('X-Total-Count')).to.be.a('string'); });",
+                  "pm.test('baris pertama = header kolom', function () { pm.expect(pm.response.text().split('\\r\\n')[0]).to.include('part_number'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Accept tidak didukung → 406",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Accept", "value": "application/xml" },
+              { "key": "X-API-Key", "value": "{{api_key}}" }
+            ],
+            "url": { "raw": "{{base_url}}/api/v1/stock", "host": ["{{base_url}}"], "path": ["api", "v1", "stock"] },
+            "description": "Bila Accept tidak memuat application/json, */*, atau text/csv, server membalas 406 NOT_ACCEPTABLE. Butuh X-API-Key, tidak mengubah data."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 406 Not Acceptable', function () { pm.response.to.have.status(406); });",
+                  "pm.test('error.code = NOT_ACCEPTABLE', function () { pm.expect(pm.response.json().error.code).to.eql('NOT_ACCEPTABLE'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Daftar Production Plan Global (filter supplier + sort)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "X-API-Key", "value": "{{api_key}}" }],
+            "url": {
+              "raw": "{{base_url}}/api/v1/production-plans?supplier_id=SUP-001&limit=5&sort=production_date:asc",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "production-plans"],
+              "query": [
+                { "key": "supplier_id", "value": "SUP-001" },
+                { "key": "limit", "value": "5" },
+                { "key": "sort", "value": "production_date:asc" }
+              ]
+            },
+            "description": "GET /api/v1/production-plans — plan dari semua supplier. Filter: supplier_id, status, part_number, q, updated_since, page, limit, sort. Butuh X-API-Key, tidak mengubah data."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200 OK', function () { pm.response.to.have.status(200); });",
+                  "pm.test('punya data array', function () { pm.expect(pm.response.json().data).to.be.an('array'); });",
+                  "pm.test('semua plan milik SUP-001', function () {",
+                  "  pm.response.json().data.forEach(function (p) { pm.expect(p.supplier_id).to.eql('SUP-001'); });",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Cari Supplier (q + limit + sort)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "X-API-Key", "value": "{{api_key}}" }],
+            "url": {
+              "raw": "{{base_url}}/api/v1/suppliers?q=PT&limit=5&sort=supplier_name:asc",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "suppliers"],
+              "query": [
+                { "key": "q", "value": "PT" },
+                { "key": "limit", "value": "5" },
+                { "key": "sort", "value": "supplier_name:asc" }
+              ]
+            },
+            "description": "GET /api/v1/suppliers dengan pencarian q (supplier_id atau supplier_name), limit, dan sort. Butuh X-API-Key, tidak mengubah data."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200 OK', function () { pm.response.to.have.status(200); });",
+                  "pm.test('meta.limit = 5', function () { pm.expect(pm.response.json().meta.limit).to.eql(5); });",
+                  "pm.test('semua hasil cocok q', function () {",
+                  "  pm.response.json().data.forEach(function (s) {",
+                  "    const cocok = (s.supplier_id + ' ' + s.supplier_name).toLowerCase().includes('pt');",
+                  "    pm.expect(cocok).to.be.true;",
+                  "  });",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "9. Cache & Quota",
+      "description": "ETag + If-None-Match untuk hemat bandwidth, dan inspeksi kuota rate limit. Semua read-only (butuh X-API-Key).",
+      "item": [
+        {
+          "name": "Ambil ETag dari Daftar Stock",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "X-API-Key", "value": "{{api_key}}" }],
+            "url": {
+              "raw": "{{base_url}}/api/v1/stock?limit=3&sort=part_number:asc",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "stock"],
+              "query": [
+                { "key": "limit", "value": "3" },
+                { "key": "sort", "value": "part_number:asc" }
+              ]
+            },
+            "description": "GET /api/v1/stock — simpan header ETag ke collection variable {{etag}} untuk request conditional berikutnya. Butuh X-API-Key, tidak mengubah data."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200 OK', function () { pm.response.to.have.status(200); });",
+                  "pm.test('ada header ETag', function () { pm.expect(pm.response.headers.get('ETag')).to.be.a('string'); });",
+                  "pm.collectionVariables.set('etag', pm.response.headers.get('ETag'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Conditional GET pakai If-None-Match → 304",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "If-None-Match", "value": "{{etag}}" },
+              { "key": "X-API-Key", "value": "{{api_key}}" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/stock?limit=3&sort=part_number:asc",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "stock"],
+              "query": [
+                { "key": "limit", "value": "3" },
+                { "key": "sort", "value": "part_number:asc" }
+              ]
+            },
+            "description": "GET yang sama dengan If-None-Match: {{etag}}. Bila data belum berubah, server membalas 304 tanpa body (tetap mengirim ETag). Butuh X-API-Key, tidak mengubah data. Jalankan request ETag di atas lebih dulu."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 304 Not Modified', function () { pm.response.to.have.status(304); });",
+                  "pm.test('body kosong', function () { pm.expect(pm.response.text()).to.eql(''); });",
+                  "pm.test('ETag tetap dikirim', function () { pm.expect(pm.response.headers.get('ETag')).to.be.a('string'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Cek Kuota Rate Limit (_ratelimit)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "X-API-Key", "value": "{{api_key}}" }],
+            "url": { "raw": "{{base_url}}/api/v1/_ratelimit", "host": ["{{base_url}}"], "path": ["api", "v1", "_ratelimit"] },
+            "description": "GET /api/v1/_ratelimit — snapshot window rate limit untuk API key ini. Butuh X-API-Key, tidak mengubah data."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200 OK', function () { pm.response.to.have.status(200); });",
+                  "const d = pm.response.json().data;",
+                  "pm.test('ada limit dan window_ms', function () { pm.expect(d.limit).to.be.a('number'); pm.expect(d.window_ms).to.be.a('number'); });",
+                  "pm.test('ada used dan remaining', function () { pm.expect(d.used).to.be.a('number'); pm.expect(d.remaining).to.be.a('number'); });",
+                  "pm.test('ada reset_at', function () { pm.expect(d.reset_at).to.be.a('string'); });",
+                  "pm.test('header X-RateLimit-Limit ada', function () { pm.expect(pm.response.headers.get('X-RateLimit-Limit')).to.be.a('string'); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "10. Idempotency",
+      "description": "MUTASI DATA: folder ini menambah supplier SUP-PM-IDEM dan menguji header Idempotency-Key. Butuh X-API-Key + Authorization: Bearer {{token}}. Jalankan request berurutan.",
+      "item": [
+        {
+          "name": "POST Supplier dengan Idempotency-Key (pertama)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-API-Key", "value": "{{api_key}}" },
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Idempotency-Key", "value": "pm-idem-001" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"supplier_id\": \"SUP-PM-IDEM\",\n  \"supplier_name\": \"PT Idempotent Demo\",\n  \"country\": \"Indonesia\",\n  \"contact_email\": \"idem@supplier.co.id\",\n  \"api_status\": \"active\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/api/v1/suppliers", "host": ["{{base_url}}"], "path": ["api", "v1", "suppliers"] },
+            "description": "MUTASI DATA: POST /api/v1/suppliers menambah supplier SUP-PM-IDEM. Butuh X-API-Key + bearer token. Pertama kali dijalankan membalas 201 dan respons di-cache selama 24 jam untuk key pm-idem-001; bila supplier sudah ada dari run sebelumnya, respons 409 ikut di-cache."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 201 Created atau 409 sudah ada', function () { pm.expect([201, 409]).to.include(pm.response.code); });",
+                  "pm.test('belum ada header replay', function () { pm.expect(pm.response.headers.get('Idempotency-Replayed')).to.eql(null); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST duplikat (key + body sama) → replay",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-API-Key", "value": "{{api_key}}" },
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Idempotency-Key", "value": "pm-idem-001" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"supplier_id\": \"SUP-PM-IDEM\",\n  \"supplier_name\": \"PT Idempotent Demo\",\n  \"country\": \"Indonesia\",\n  \"contact_email\": \"idem@supplier.co.id\",\n  \"api_status\": \"active\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/api/v1/suppliers", "host": ["{{base_url}}"], "path": ["api", "v1", "suppliers"] },
+            "description": "MUTASI DATA (tetapi tidak dijalankan ulang): key dan body sama persis dengan request pertama. Server mengirim respons cache + header Idempotency-Replayed: true, handler tidak dijalankan lagi. Butuh X-API-Key + bearer token."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Idempotency-Replayed = true', function () { pm.expect(pm.response.headers.get('Idempotency-Replayed')).to.eql('true'); });",
+                  "pm.test('status sama dengan respons pertama', function () { pm.expect([201, 409]).to.include(pm.response.code); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST key sama body beda → 409 IDEMPOTENCY_KEY_REUSED",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-API-Key", "value": "{{api_key}}" },
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Idempotency-Key", "value": "pm-idem-001" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"supplier_id\": \"SUP-PM-IDEM\",\n  \"supplier_name\": \"PT Idempotent Demo (nama berubah)\",\n  \"country\": \"Indonesia\",\n  \"contact_email\": \"idem@supplier.co.id\",\n  \"api_status\": \"active\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/api/v1/suppliers", "host": ["{{base_url}}"], "path": ["api", "v1", "suppliers"] },
+            "description": "MUTASI DITOLAK: Idempotency-Key pm-idem-001 dipakai lagi dengan body berbeda. Server tidak menjalankan handler dan membalas 409 IDEMPOTENCY_KEY_REUSED. Butuh X-API-Key + bearer token."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 409 Conflict', function () { pm.response.to.have.status(409); });",
+                  "pm.test('error.code = IDEMPOTENCY_KEY_REUSED', function () { pm.expect(pm.response.json().error.code).to.eql('IDEMPOTENCY_KEY_REUSED'); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "11. Webhooks",
+      "description": "MUTASI DATA: mendaftarkan dan menghapus subscription webhook (butuh X-API-Key + Authorization: Bearer {{token}}). Subscription disimpan in-memory, hilang saat server restart.",
+      "item": [
+        {
+          "name": "Daftarkan Subscription Webhook (POST) → 201",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-API-Key", "value": "{{api_key}}" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"url\": \"http://127.0.0.1:9/hook\",\n  \"events\": [\"stock.updated\"]\n}"
+            },
+            "url": { "raw": "{{base_url}}/api/v1/webhooks/subscriptions", "host": ["{{base_url}}"], "path": ["api", "v1", "webhooks", "subscriptions"] },
+            "description": "MUTASI DATA: POST /api/v1/webhooks/subscriptions mendaftarkan endpoint penerima event stock.updated. Butuh X-API-Key + bearer token. Respons 201 berisi subscription_id (disimpan ke {{wh_id}}) dan secret untuk verifikasi tanda tangan."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 201 Created', function () { pm.response.to.have.status(201); });",
+                  "const d = pm.response.json().data;",
+                  "pm.test('ada subscription_id', function () { pm.expect(d.subscription_id).to.be.a('string'); });",
+                  "pm.test('ada secret', function () { pm.expect(d.secret).to.be.a('string'); });",
+                  "pm.collectionVariables.set('wh_id', d.subscription_id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Daftar Subscription Webhook (GET)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "X-API-Key", "value": "{{api_key}}" }],
+            "url": { "raw": "{{base_url}}/api/v1/webhooks/subscriptions", "host": ["{{base_url}}"], "path": ["api", "v1", "webhooks", "subscriptions"] },
+            "description": "GET /api/v1/webhooks/subscriptions — daftar semua subscription. Read-only, butuh X-API-Key."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200 OK', function () { pm.response.to.have.status(200); });",
+                  "pm.test('punya data array', function () { pm.expect(pm.response.json().data).to.be.an('array'); });",
+                  "if (pm.collectionVariables.get('wh_id')) {",
+                  "  pm.test('subscription baru terdaftar', function () {",
+                  "    const ids = pm.response.json().data.map(function (s) { return s.subscription_id; });",
+                  "    pm.expect(ids).to.include(pm.collectionVariables.get('wh_id'));",
+                  "  });",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Kirim Event Uji (POST test) → 202",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "X-API-Key", "value": "{{api_key}}" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": { "raw": "{{base_url}}/api/v1/webhooks/subscriptions/{{wh_id}}/test", "host": ["{{base_url}}"], "path": ["api", "v1", "webhooks", "subscriptions", "{{wh_id}}", "test"] },
+            "description": "POST /api/v1/webhooks/subscriptions/{{wh_id}}/test — antrekan event sintetis webhook.test ke endpoint. Butuh X-API-Key + bearer token. Membuat satu baris delivery (mutasi data) dan membalas 202."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 202 Accepted', function () { pm.response.to.have.status(202); });",
+                  "const d = pm.response.json().data;",
+                  "pm.test('event = webhook.test', function () { pm.expect(d.event).to.eql('webhook.test'); });",
+                  "pm.test('ada delivery_id', function () { pm.expect(d.delivery_id).to.be.a('string'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Riwayat Delivery (GET deliveries)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "X-API-Key", "value": "{{api_key}}" }],
+            "url": {
+              "raw": "{{base_url}}/api/v1/webhooks/deliveries?subscription_id={{wh_id}}&page=1&limit=10",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "webhooks", "deliveries"],
+              "query": [
+                { "key": "subscription_id", "value": "{{wh_id}}" },
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "10" }
+              ]
+            },
+            "description": "GET /api/v1/webhooks/deliveries — log pengiriman terbaru (filter subscription_id, status, page, limit). Read-only, butuh X-API-Key."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200 OK', function () { pm.response.to.have.status(200); });",
+                  "pm.test('punya data array', function () { pm.expect(pm.response.json().data).to.be.an('array'); });",
+                  "pm.test('meta.limit = 10', function () { pm.expect(pm.response.json().meta.limit).to.eql(10); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Hapus Subscription Webhook (DELETE) → 204",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              { "key": "X-API-Key", "value": "{{api_key}}" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": { "raw": "{{base_url}}/api/v1/webhooks/subscriptions/{{wh_id}}", "host": ["{{base_url}}"], "path": ["api", "v1", "webhooks", "subscriptions", "{{wh_id}}"] },
+            "description": "MUTASI DATA: DELETE /api/v1/webhooks/subscriptions/{{wh_id}} menghapus subscription dan membalas 204 tanpa body. Butuh X-API-Key + bearer token."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 204 No Content', function () { pm.response.to.have.status(204); });",
+                  "pm.test('body kosong', function () { pm.expect(pm.response.text()).to.eql(''); });"
+                ]
+              }
+            }
+          ]
         }
       ]
     }

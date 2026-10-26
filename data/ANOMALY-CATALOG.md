@@ -1,10 +1,10 @@
 # ANOMALY CATALOG — Dataset Sandbox (TRAINER ONLY)
 
 > ⚠️ **Jangan dibagikan ke peserta.** File ini memuat kunci jawaban latihan.
-> Dataset default (`sandbox/data/*.json`) **sengaja** mengandung anomali. Semua ini bukan bug.
-> Jika kamu mengubah data, **perbarui file ini** dan jalankan ulang `bash sandbox/scripts/smoke-test.sh`.
+> Dataset default (`data/*.json`) **sengaja** mengandung anomali. Semua ini bukan bug.
+> Jika kamu mengubah data, **perbarui file ini** dan jalankan ulang `bash scripts/smoke-test.sh`.
 
-Terakhir diverifikasi: 2026-10-22 · smoke test: **39/39 PASS**
+Terakhir diverifikasi: 2026-10-26 · smoke test: **67/67 PASS**
 
 ---
 
@@ -36,12 +36,13 @@ Terakhir diverifikasi: 2026-10-22 · smoke test: **39/39 PASS**
 
 Jika salah satu angka di atas berubah, **update materi + katalog ini + smoke test** dalam satu commit.
 
-## 3. Anomali yang belum ada (kandidat Paket 3+)
+## 3. Keterbatasan yang tersisa (bahan task lanjutan)
 
-- Partial success pada `POST /stock/bulk` → saat ini all-or-nothing (`handlers.js`), hanya `400` + `details[].index`
-- Pagination drift (data berubah saat paging)
-- `429` dengan `Retry-After` nyata (sekarang hanya lewat `?simulate=ratelimit`)
-- Soft delete / data hilang tanpa jejak
-- Breaking change versi (`/v1` → `/v2`)
-- Cache/CDN stale di sisi dashboard
-- Clock skew (timestamp masa depan)
+- Pagination drift: data berubah saat paging; belum ada snapshot/cursor stabil.
+- Soft delete / audit trail: `DELETE` stock menghapus permanen; supplier dan plan tidak punya DELETE.
+- Breaking change versi: belum ada `/v2`, header versi, atau kebijakan deprecation.
+- Cache/CDN stale di dashboard: dashboard masih membaca langsung tanpa ETag.
+- Clock skew: belum ada validasi timestamp masa depan pada payload.
+- Webhook dan idempotency in-memory: restart menghapus subscription, delivery, dan cache idempotency.
+- Kuota per job: hanya satu API key demo; belum ada provisioning kunci atau kuota terpisah.
+- Observability: belum ada metrics/access log terstruktur selain log konsol.

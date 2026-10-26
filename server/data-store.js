@@ -52,10 +52,28 @@ let planCounter = 0;
 let persistSeq = 0;
 
 /**
+ * Revision counter backing the ETag cache validator. It changes on every
+ * successful mutation AND once at seed time, regardless of PERSIST_DATA.
+ * WHY a counter and not a hash of the data: it is cheap, monotonic and cannot
+ * collide for two different states.
+ */
+let revision = 0;
+
+function bumpRevision() {
+  revision += 1;
+}
+
+function getRevision() {
+  return revision;
+}
+
+/**
  * Snapshot the current state to STATE_FILE. No-op unless PERSIST_DATA is on.
  * Failures are logged and swallowed: the API keeps serving from memory.
+ * Every mutation funnels through here, so the revision bump lives here too.
  */
 function persist() {
+  bumpRevision();
   if (!PERSIST) return;
   try {
     fs.mkdirSync(STORE_DIR, { recursive: true });
@@ -121,14 +139,150 @@ function seed() {
     // Create state.json immediately so the volume starts with a snapshot.
     if (PERSIST) persist();
   }
+  // Seed initialisation is itself a state change: start the ETag lineage here.
+  bumpRevision();
   if (PERSIST) console.log('[data] persistence ON -> ' + STATE_FILE);
 }
 
 seed(); // load immediately on require()
 
+// ---- Shared query helpers (filter / sort / paginate) --------------------
+
+const DEFAULT_LIMIT = 10;
+const MAX_LIMIT = 50;
+
+/** page: non-numeric or < 1 falls back to 1. */
+function normalizePage(value) {
+  const n = parseInt(value, 10);
+  return Number.isNaN(n) || n < 1 ? 1 : n;
+}
+
+/** limit: default 10, capped at 50, floored at 1. */
+function normalizeLimit(value) {
+  const n = parseInt(value, 10);
+  if (Number.isNaN(n)) return DEFAULT_LIMIT;
+  return Math.min(MAX_LIMIT, Math.max(1, n));
+}
+
+/**
+ * Paginate a filtered row array. `total_pages` is 0 when nothing matched, for
+ * every list endpoint (nested and global alike), and at least 1 otherwise.
+ */
+function paginate(rows, opts = {}) {
+  const page = normalizePage(opts.page);
+  const limit = normalizeLimit(opts.limit);
+  const total = rows.length;
+  const total_pages = total === 0 ? 0 : Math.max(1, Math.ceil(total / limit));
+  const start = (page - 1) * limit;
+  const data = clone(rows.slice(start, start + limit));
+  return { data, meta: { total, page, limit, total_pages } };
+}
+
+/** True when the caller actually sent a usable filter value. */
+function hasFilter(value) {
+  return value !== undefined && value !== null && String(value).trim() !== '';
+}
+
+function containsIgnoreCase(haystack, needle) {
+  return String(haystack ?? '').toLowerCase().includes(String(needle).toLowerCase());
+}
+
+/** Parse "field:asc|desc". Unknown direction means ascending. */
+function parseSort(sort) {
+  if (!hasFilter(sort)) return null;
+  const [field, dirRaw] = String(sort).split(':');
+  return { field, dir: dirRaw === 'desc' ? -1 : 1 };
+}
+
+/** Numeric view of a value, or null when it is not a finite number. */
+function toNumberOrNull(value) {
+  if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+  if (typeof value === 'string' && value.trim() !== '') {
+    const n = Number(value.trim());
+    return Number.isFinite(n) ? n : null;
+  }
+  return null;
+}
+
+const NUMERIC_SORT_FIELDS = new Set(['stock_quantity', 'unit_price', 'planned_quantity']);
+const DATE_SORT_FIELDS = new Set(['last_updated', 'production_date', 'delivery_schedule']);
+
+/**
+ * Comparator tolerant of the seed anomalies (string quantities, null cells,
+ * missing fields): numbers compare numerically, dates chronologically,
+ * everything else as strings. Missing values always sort last.
+ */
+function buildComparator(field, dir) {
+  return (a, b) => {
+    const av = a[field];
+    const bv = b[field];
+    const aMissing = av === undefined || av === null || av === '';
+    const bMissing = bv === undefined || bv === null || bv === '';
+    if (aMissing && bMissing) return 0;
+    if (aMissing) return 1;
+    if (bMissing) return -1;
+
+    if (DATE_SORT_FIELDS.has(field)) {
+      const at = Date.parse(av);
+      const bt = Date.parse(bv);
+      if (!Number.isNaN(at) && !Number.isNaN(bt)) return (at - bt) * dir;
+    }
+
+    const an = toNumberOrNull(av);
+    const bn = toNumberOrNull(bv);
+    const numericOnly =
+      NUMERIC_SORT_FIELDS.has(field) || (an !== null && bn !== null);
+    if (numericOnly && an !== null && bn !== null) return (an - bn) * dir;
+
+    return String(av).localeCompare(String(bv)) * dir;
+  };
+}
+
+/** Sort a copy of rows when `sort` names an allowed field; else keep order. */
+function applySort(rows, sort, allowedFields) {
+  const parsed = parseSort(sort);
+  if (!parsed || !allowedFields.includes(parsed.field)) return rows;
+  return rows.slice().sort(buildComparator(parsed.field, parsed.dir));
+}
+
+/** updated_since accepts any ISO date-time; unparseable values are ignored. */
+function filterUpdatedSince(rows, updatedSince) {
+  if (!hasFilter(updatedSince)) return rows;
+  const since = Date.parse(updatedSince);
+  if (Number.isNaN(since)) return rows;
+  return rows.filter((r) => Date.parse(r.last_updated) >= since);
+}
+
 // ---- Suppliers ----------------------------------------------------------
-function listSuppliers() {
-  return clone(suppliers);
+
+const SUPPLIER_SORT_FIELDS = ['supplier_id', 'supplier_name', 'country', 'api_status'];
+
+/**
+ * List suppliers with filtering + pagination + sorting.
+ * @param {{api_status?:string,country?:string,q?:string,page?:*,limit?:*,sort?:string}} opts
+ */
+function listSuppliers(opts = {}) {
+  let rows = suppliers;
+
+  if (hasFilter(opts.api_status)) {
+    // Exact match only. An unknown value is a legitimate "no results" filter,
+    // not a validation error (students learn filtering by observation).
+    rows = rows.filter((s) => s.api_status === opts.api_status);
+  }
+  if (hasFilter(opts.country)) {
+    const country = String(opts.country).toLowerCase();
+    rows = rows.filter((s) => String(s.country ?? '').toLowerCase() === country);
+  }
+  if (hasFilter(opts.q)) {
+    rows = rows.filter(
+      (s) =>
+        containsIgnoreCase(s.supplier_id, opts.q) ||
+        containsIgnoreCase(s.supplier_name, opts.q)
+    );
+  }
+
+  rows = applySort(rows, opts.sort, SUPPLIER_SORT_FIELDS);
+  return paginate(rows, opts);
 }
 
 function getSupplier(supplierId) {
@@ -136,10 +290,88 @@ function getSupplier(supplierId) {
   return found ? clone(found) : null;
 }
 
+function findSupplierIndex(supplierId) {
+  return suppliers.findIndex((s) => s.supplier_id === supplierId);
+}
+
 function createSupplier(record) {
   suppliers.push(clone(record));
   persist();
   return clone(record);
+}
+
+/** Full replace: identity is forced from the existing record. */
+function replaceSupplier(supplierId, record) {
+  const idx = findSupplierIndex(supplierId);
+  if (idx === -1) return null;
+  suppliers[idx] = clone({ ...record, supplier_id: suppliers[idx].supplier_id });
+  persist();
+  return clone(suppliers[idx]);
+}
+
+/** Partial update: merge the patch, identity fields stay immutable. */
+function patchSupplier(supplierId, patch) {
+  const idx = findSupplierIndex(supplierId);
+  if (idx === -1) return null;
+  const current = suppliers[idx];
+  const next = { ...current, ...clone(patch) };
+  next.supplier_id = current.supplier_id;
+  suppliers[idx] = next;
+  persist();
+  return clone(next);
+}
+
+/**
+ * Bulk replace suppliers — never creates. Pre-checks every supplier_id so a
+ * missing supplier leaves the store untouched; then writes in one pass and
+ * persists once. Returns { missing: [ids] } or { updated, items }.
+ */
+function bulkReplaceSuppliers(items) {
+  const targets = new Map(); // supplier index -> replacement record
+  const missing = [];
+  for (const record of items) {
+    const idx = findSupplierIndex(record.supplier_id);
+    if (idx === -1) {
+      missing.push(record.supplier_id);
+    } else {
+      targets.set(idx, record);
+    }
+  }
+  if (missing.length > 0) return { missing };
+  for (const [idx, record] of targets) {
+    suppliers[idx] = clone({ ...record, supplier_id: suppliers[idx].supplier_id });
+  }
+  persist();
+  return {
+    updated: items.length,
+    items: items.map((record) => ({ supplier_id: record.supplier_id, action: 'updated' })),
+  };
+}
+
+/** Bulk patch suppliers — merge-only, atomic, never creates. */
+function bulkPatchSuppliers(items) {
+  const targets = new Map(); // supplier index -> patch
+  const missing = [];
+  for (const patch of items) {
+    const idx = findSupplierIndex(patch.supplier_id);
+    if (idx === -1) {
+      missing.push(patch.supplier_id);
+    } else {
+      targets.set(idx, patch);
+    }
+  }
+  if (missing.length > 0) return { missing };
+  for (const [idx, patch] of targets) {
+    const current = suppliers[idx];
+    const next = { ...current, ...clone(patch) };
+    next.supplier_id = current.supplier_id;
+    suppliers[idx] = next;
+  }
+  persist();
+  return {
+    updated: items.length,
+    items: items.map((patch) => ({ supplier_id: patch.supplier_id, action: 'updated' })),
+  };
 }
 
 // ---- Stock --------------------------------------------------------------
@@ -151,42 +383,60 @@ function findStockIndex(supplierId, partNumber) {
   );
 }
 
+const STOCK_SORT_FIELDS = [
+  'part_number',
+  'stock_quantity',
+  'last_updated',
+  'supplier_id',
+  'unit_price',
+];
+
 /**
- * List stock for a supplier with optional filter/sort/pagination.
+ * List stock for one supplier with optional filter/sort/pagination.
  * @param {string} supplierId
- * @param {{status?:string,page?:number,limit?:number,updated_since?:string,sort?:string}} opts
+ * @param {{status?:string,page?:*,limit?:*,updated_since?:string,sort?:string}} opts
  */
 function listStock(supplierId, opts = {}) {
   let rows = stock.filter((r) => r.supplier_id === supplierId);
 
-  if (opts.status) {
+  if (hasFilter(opts.status)) {
     rows = rows.filter((r) => r.stock_status === opts.status);
   }
-  if (opts.updated_since) {
-    const since = Date.parse(opts.updated_since);
-    if (!Number.isNaN(since)) {
-      rows = rows.filter((r) => Date.parse(r.last_updated) >= since);
-    }
-  }
-  if (opts.sort) {
-    const [field, dirRaw] = String(opts.sort).split(':');
-    const dir = dirRaw === 'desc' ? -1 : 1;
-    rows = rows.slice().sort((a, b) => {
-      const av = a[field];
-      const bv = b[field];
-      if (typeof av === 'number' && typeof bv === 'number') return (av - bv) * dir;
-      return String(av).localeCompare(String(bv)) * dir;
-    });
-  }
+  rows = filterUpdatedSince(rows, opts.updated_since);
+  rows = applySort(rows, opts.sort, STOCK_SORT_FIELDS);
 
-  const page = Math.max(1, opts.page || 1);
-  const limit = Math.min(50, Math.max(1, opts.limit || 10));
-  const total = rows.length;
-  const total_pages = Math.max(1, Math.ceil(total / limit));
-  const start = (page - 1) * limit;
-  const data = clone(rows.slice(start, start + limit));
+  return paginate(rows, opts);
+}
 
-  return { data, meta: { page, limit, total, total_pages } };
+/**
+ * Global stock list (all suppliers) with the same filters as the nested list
+ * plus part_number/q. Rows keep the nested shape (supplier_id + supplier_name).
+ * @param {{supplier_id?:string,status?:string,part_number?:string,q?:string,
+ *          updated_since?:string,page?:*,limit?:*,sort?:string}} opts
+ */
+function listAllStock(opts = {}) {
+  let rows = stock;
+
+  if (hasFilter(opts.supplier_id)) {
+    rows = rows.filter((r) => r.supplier_id === opts.supplier_id);
+  }
+  if (hasFilter(opts.status)) {
+    rows = rows.filter((r) => r.stock_status === opts.status);
+  }
+  if (hasFilter(opts.part_number)) {
+    // Exact as stored: part numbers keep their original casing.
+    rows = rows.filter((r) => r.part_number === opts.part_number);
+  }
+  if (hasFilter(opts.q)) {
+    rows = rows.filter(
+      (r) =>
+        containsIgnoreCase(r.part_number, opts.q) || containsIgnoreCase(r.part_name, opts.q)
+    );
+  }
+  rows = filterUpdatedSince(rows, opts.updated_since);
+  rows = applySort(rows, opts.sort, STOCK_SORT_FIELDS);
+
+  return paginate(rows, opts);
 }
 
 function getStockItem(supplierId, partNumber) {
@@ -320,18 +570,56 @@ function bulkPatchStock(supplierId, patches) {
 
 // ---- Production plans ---------------------------------------------------
 
+const PLAN_SORT_FIELDS = [
+  'plan_id',
+  'production_date',
+  'delivery_schedule',
+  'last_updated',
+  'planned_quantity',
+];
+
+/**
+ * List production plans for one supplier (status/updated_since/sort/pagination).
+ * @param {string} supplierId
+ * @param {{status?:string,updated_since?:string,page?:*,limit?:*,sort?:string}} opts
+ */
 function listProductionPlans(supplierId, opts = {}) {
   let rows = productionPlans.filter((r) => r.supplier_id === supplierId);
-  if (opts.status) {
+  if (hasFilter(opts.status)) {
     rows = rows.filter((r) => r.production_status === opts.status);
   }
-  const page = Math.max(1, opts.page || 1);
-  const limit = Math.min(50, Math.max(1, opts.limit || 10));
-  const total = rows.length;
-  const total_pages = Math.max(1, Math.ceil(total / limit));
-  const start = (page - 1) * limit;
-  const data = clone(rows.slice(start, start + limit));
-  return { data, meta: { page, limit, total, total_pages } };
+  rows = filterUpdatedSince(rows, opts.updated_since);
+  rows = applySort(rows, opts.sort, PLAN_SORT_FIELDS);
+  return paginate(rows, opts);
+}
+
+/**
+ * Global production plans list (all suppliers).
+ * @param {{supplier_id?:string,status?:string,part_number?:string,q?:string,
+ *          updated_since?:string,page?:*,limit?:*,sort?:string}} opts
+ */
+function listAllProductionPlans(opts = {}) {
+  let rows = productionPlans;
+
+  if (hasFilter(opts.supplier_id)) {
+    rows = rows.filter((r) => r.supplier_id === opts.supplier_id);
+  }
+  if (hasFilter(opts.status)) {
+    rows = rows.filter((r) => r.production_status === opts.status);
+  }
+  if (hasFilter(opts.part_number)) {
+    rows = rows.filter((r) => r.part_number === opts.part_number);
+  }
+  if (hasFilter(opts.q)) {
+    rows = rows.filter(
+      (r) =>
+        containsIgnoreCase(r.part_number, opts.q) || containsIgnoreCase(r.part_name, opts.q)
+    );
+  }
+  rows = filterUpdatedSince(rows, opts.updated_since);
+  rows = applySort(rows, opts.sort, PLAN_SORT_FIELDS);
+
+  return paginate(rows, opts);
 }
 
 function getProductionPlan(planId) {
@@ -348,12 +636,108 @@ function createProductionPlan(record) {
   return clone(created);
 }
 
+function findPlanIndex(planId) {
+  return productionPlans.findIndex((p) => p.plan_id === planId);
+}
+
+/** Full replace: plan_id/supplier_id are forced from the existing plan. */
+function replaceProductionPlan(planId, record) {
+  const idx = findPlanIndex(planId);
+  if (idx === -1) return null;
+  const current = productionPlans[idx];
+  productionPlans[idx] = clone({
+    ...record,
+    plan_id: current.plan_id,
+    supplier_id: current.supplier_id,
+  });
+  persist();
+  return clone(productionPlans[idx]);
+}
+
+/** Partial update: merge the patch, identity fields stay immutable. */
+function patchProductionPlan(planId, patch) {
+  const idx = findPlanIndex(planId);
+  if (idx === -1) return null;
+  const current = productionPlans[idx];
+  const next = { ...current, ...clone(patch) };
+  next.plan_id = current.plan_id;
+  next.supplier_id = current.supplier_id;
+  productionPlans[idx] = next;
+  persist();
+  return clone(next);
+}
+
+/**
+ * Bulk replace plans for one supplier — never creates. Pre-checks every item
+ * against BOTH plan_id and supplier_id, so a missing/foreign plan leaves the
+ * store untouched. Writes in one pass and persists once.
+ */
+function bulkReplaceProductionPlans(supplierId, items) {
+  const targets = new Map(); // plan index -> replacement record
+  const missing = [];
+  for (const record of items) {
+    const idx = findPlanIndex(record.plan_id);
+    if (idx === -1 || productionPlans[idx].supplier_id !== supplierId) {
+      missing.push(record.plan_id);
+    } else {
+      targets.set(idx, record);
+    }
+  }
+  if (missing.length > 0) return { missing };
+  for (const [idx, record] of targets) {
+    const current = productionPlans[idx];
+    productionPlans[idx] = clone({
+      ...record,
+      plan_id: current.plan_id,
+      supplier_id: current.supplier_id,
+    });
+  }
+  persist();
+  return {
+    updated: items.length,
+    items: items.map((record) => ({ plan_id: record.plan_id, action: 'updated' })),
+  };
+}
+
+/** Bulk patch plans for one supplier — merge-only, atomic, never creates. */
+function bulkPatchProductionPlans(supplierId, items) {
+  const targets = new Map(); // plan index -> patch
+  const missing = [];
+  for (const patch of items) {
+    const idx = findPlanIndex(patch.plan_id);
+    if (idx === -1 || productionPlans[idx].supplier_id !== supplierId) {
+      missing.push(patch.plan_id);
+    } else {
+      targets.set(idx, patch);
+    }
+  }
+  if (missing.length > 0) return { missing };
+  for (const [idx, patch] of targets) {
+    const current = productionPlans[idx];
+    const next = { ...current, ...clone(patch) };
+    next.plan_id = current.plan_id;
+    next.supplier_id = current.supplier_id;
+    productionPlans[idx] = next;
+  }
+  persist();
+  return {
+    updated: items.length,
+    items: items.map((patch) => ({ plan_id: patch.plan_id, action: 'updated' })),
+  };
+}
+
 module.exports = {
   seed,
+  getRevision,
   listSuppliers,
   getSupplier,
   createSupplier,
+  replaceSupplier,
+  patchSupplier,
+  bulkReplaceSuppliers,
+  bulkPatchSuppliers,
   listStock,
+  listAllStock,
   getStockItem,
   createStock,
   replaceStock,
@@ -363,6 +747,11 @@ module.exports = {
   bulkReplaceStock,
   bulkPatchStock,
   listProductionPlans,
+  listAllProductionPlans,
   getProductionPlan,
   createProductionPlan,
+  replaceProductionPlan,
+  patchProductionPlan,
+  bulkReplaceProductionPlans,
+  bulkPatchProductionPlans,
 };

@@ -3,13 +3,19 @@
 # smoke-test.sh — Verifies the Mock Supplier API end-to-end with curl.
 #
 # PREREQUISITE: the server must already be running:
-#     node sandbox/server/server.js
+#     node server/server.js
 #
 # Usage:
-#     bash sandbox/scripts/smoke-test.sh
-#     BASE_URL=http://localhost:4020 bash sandbox/scripts/smoke-test.sh
+#     bash scripts/smoke-test.sh
+#     BASE_URL=http://localhost:4020 bash scripts/smoke-test.sh
 #
 # It prints PASS/FAIL per check with the observed HTTP status code.
+#
+# NOTE: the run mutates in-memory data. It creates `SUP-SMOKE-<epoch>` and
+# `SUP-SMK-<pid>` suppliers, a `SMOKE-<epoch>` stock record, a production plan
+# and a webhook subscription (deleted again at the end). Webhook deliveries stay
+# in memory and the unreachable receiver (127.0.0.1:9) is contacted in the
+# background only, so the script never waits for it.
 
 set -u
 
@@ -22,7 +28,15 @@ READONLY_TOKEN="readonly-token"
 PASS=0
 FAIL=0
 TMP_BODY="$(mktemp)"
-trap 'rm -f "$TMP_BODY"' EXIT
+TMP_HEADERS="$(mktemp)"
+trap 'rm -f "$TMP_BODY" "$TMP_HEADERS"' EXIT
+
+# Values captured from earlier responses (initialised for `set -u`).
+ETAG=""
+WH_ID=""
+WH_URL=""
+IDEM_KEY=""
+IDEM_SUPPLIER=""
 
 green() { printf "\033[32m%s\033[0m" "$1"; }
 red()   { printf "\033[31m%s\033[0m" "$1"; }
@@ -41,6 +55,121 @@ check() {
   fi
 }
 
+# header_value <header-name> — value of the last response header, CR stripped.
+header_value() {
+  grep -i "^$1:" "$TMP_HEADERS" | head -1 | sed 's/^[^:]*:[[:space:]]*//' | tr -d '\r'
+}
+
+# check_header_present <name> <header-name> <curl args...>
+# Asserts the header exists and carries a non-empty value.
+check_header_present() {
+  local name="$1" header_name="$2"; shift 2
+  local code value
+  code="$(curl -s -o "$TMP_BODY" -D "$TMP_HEADERS" -w "%{http_code}" "$@")"
+  value="$(header_value "$header_name")"
+  if [ -n "$value" ]; then
+    printf "  %s [%s] %s\n" "$(green PASS)" "$code" "$name"
+    PASS=$((PASS + 1))
+  else
+    printf "  %s [%s, header %s kosong] %s\n" "$(red FAIL)" "$code" "$header_name" "$name"
+    FAIL=$((FAIL + 1))
+  fi
+}
+
+# check_header_contains <name> <header-name> <expected-substring> <curl args...>
+check_header_contains() {
+  local name="$1" header_name="$2" expected="$3"; shift 3
+  local code value
+  code="$(curl -s -o "$TMP_BODY" -D "$TMP_HEADERS" -w "%{http_code}" "$@")"
+  value="$(header_value "$header_name")"
+  if [ -n "$value" ] && printf '%s' "$value" | grep -qF -- "$expected"; then
+    printf "  %s [%s] %s\n" "$(green PASS)" "$code" "$name"
+    PASS=$((PASS + 1))
+  else
+    printf "  %s [%s, %s tanpa \"%s\"] %s\n" "$(red FAIL)" "$code" "$header_name" "$expected" "$name"
+    FAIL=$((FAIL + 1))
+  fi
+}
+
+# check_absent_header <name> <header-name> <curl args...>
+check_absent_header() {
+  local name="$1" header_name="$2"; shift 2
+  local code value
+  code="$(curl -s -o "$TMP_BODY" -D "$TMP_HEADERS" -w "%{http_code}" "$@")"
+  value="$(header_value "$header_name")"
+  if [ -z "$value" ]; then
+    printf "  %s [%s] %s\n" "$(green PASS)" "$code" "$name"
+    PASS=$((PASS + 1))
+  else
+    printf "  %s [%s, header %s = %s] %s\n" "$(red FAIL)" "$code" "$header_name" "$value" "$name"
+    FAIL=$((FAIL + 1))
+  fi
+}
+
+# check_body_contains <name> <expected-substring> <curl args...>
+check_body_contains() {
+  local name="$1" expected="$2"; shift 2
+  local code
+  code="$(curl -s -o "$TMP_BODY" -w "%{http_code}" "$@")"
+  if grep -qF -- "$expected" "$TMP_BODY"; then
+    printf "  %s [%s] %s\n" "$(green PASS)" "$code" "$name"
+    PASS=$((PASS + 1))
+  else
+    printf "  %s [%s, body tanpa \"%s\"] %s\n" "$(red FAIL)" "$code" "$expected" "$name"
+    FAIL=$((FAIL + 1))
+  fi
+}
+
+# check_status_header_contains <name> <expected-status> <header-name> <expected-substring> <curl args...>
+check_status_header_contains() {
+  local name="$1" expected="$2" header_name="$3" needle="$4"; shift 4
+  local code value
+  code="$(curl -s -o "$TMP_BODY" -D "$TMP_HEADERS" -w "%{http_code}" "$@")"
+  value="$(header_value "$header_name")"
+  if [ "$code" = "$expected" ] && [ -n "$value" ] && printf '%s' "$value" | grep -qF -- "$needle"; then
+    printf "  %s [%s] %s\n" "$(green PASS)" "$code" "$name"
+    PASS=$((PASS + 1))
+  else
+    printf "  %s [got %s, want %s / %s tanpa \"%s\"] %s\n" \
+      "$(red FAIL)" "$code" "$expected" "$header_name" "$needle" "$name"
+    FAIL=$((FAIL + 1))
+  fi
+}
+
+# check_status_body_contains <name> <expected-status> <expected-substring> <curl args...>
+check_status_body_contains() {
+  local name="$1" expected="$2" needle="$3"; shift 3
+  local code
+  code="$(curl -s -o "$TMP_BODY" -w "%{http_code}" "$@")"
+  if [ "$code" = "$expected" ] && grep -qF -- "$needle" "$TMP_BODY"; then
+    printf "  %s [%s] %s\n" "$(green PASS)" "$code" "$name"
+    PASS=$((PASS + 1))
+  else
+    printf "  %s [got %s, want %s / body tanpa \"%s\"] %s\n" \
+      "$(red FAIL)" "$code" "$expected" "$needle" "$name"
+    FAIL=$((FAIL + 1))
+  fi
+}
+
+# check_status_empty_body <name> <expected-status> <curl args...>
+check_status_empty_body() {
+  local name="$1" expected="$2"; shift 2
+  local code
+  # curl does not truncate -o on a 304 (no body is written), so start clean.
+  : > "$TMP_BODY"
+  code="$(curl -s -o "$TMP_BODY" -D "$TMP_HEADERS" -w "%{http_code}" "$@")"
+  if [ "$code" = "$expected" ] && [ ! -s "$TMP_BODY" ]; then
+    printf "  %s [%s, body kosong] %s\n" "$(green PASS)" "$code" "$name"
+    PASS=$((PASS + 1))
+  else
+    local body_state="kosong"
+    [ -s "$TMP_BODY" ] && body_state="tidak kosong"
+    printf "  %s [got %s, want %s / body %s] %s\n" \
+      "$(red FAIL)" "$code" "$expected" "$body_state" "$name"
+    FAIL=$((FAIL + 1))
+  fi
+}
+
 echo "══════════════════════════════════════════════════════════════"
 echo " Smoke test — Mock Supplier API @ $BASE_URL"
 echo "══════════════════════════════════════════════════════════════"
@@ -49,7 +178,7 @@ echo "════════════════════════�
 echo "─ Health ──────────────────────────────────────────────────────"
 if ! curl -s -o /dev/null "$BASE_URL/health"; then
   echo "  $(red ERROR): server tidak berjalan di $BASE_URL"
-  echo "  Jalankan dulu: node sandbox/server/server.js"
+  echo "  Jalankan dulu: node server/server.js"
   exit 1
 fi
 check "GET /health" 200 "$BASE_URL/health"
@@ -202,6 +331,83 @@ check "POST production plan SUP-999 -> 404" 404 \
   -X POST -H "Content-Type: application/json" -H "X-API-Key: $API_KEY" -H "Authorization: Bearer $TOKEN" \
   -d "{\"part_number\":\"SMOKE-PLAN-01\",\"part_name\":\"Smoke Plan Part\",\"production_plan\":\"Smoke Test Plan\",\"planned_quantity\":100,\"production_date\":\"2026-05-01\",\"production_status\":\"planned\",\"delivery_schedule\":\"2026-05-10\"}" \
   "$BASE_URL/api/v1/suppliers/SUP-999/production-plans"
+
+echo "─ Global Reads & CSV ─────────────────────────────────────────"
+check "GET /api/v1/stock" 200 \
+  -H "X-API-Key: $API_KEY" "$BASE_URL/api/v1/stock"
+check "GET /api/v1/stock?status=low&limit=5" 200 \
+  -H "X-API-Key: $API_KEY" "$BASE_URL/api/v1/stock?status=low&limit=5"
+check_status_header_contains "GET /api/v1/stock Accept: text/csv -> 200 + Content-Type" 200 \
+  "Content-Type" "text/csv" \
+  -H "X-API-Key: $API_KEY" -H "Accept: text/csv" "$BASE_URL/api/v1/stock"
+check_status_body_contains "GET /api/v1/stock Accept: application/xml -> 406 NOT_ACCEPTABLE" 406 \
+  "NOT_ACCEPTABLE" \
+  -H "X-API-Key: $API_KEY" -H "Accept: application/xml" "$BASE_URL/api/v1/stock"
+check "GET /api/v1/production-plans" 200 \
+  -H "X-API-Key: $API_KEY" "$BASE_URL/api/v1/production-plans"
+check "GET /api/v1/suppliers?api_status=active&limit=1" 200 \
+  -H "X-API-Key: $API_KEY" "$BASE_URL/api/v1/suppliers?api_status=active&limit=1"
+
+echo "─ Cache ───────────────────────────────────────────────────────"
+STOCK_CACHE_URL="$BASE_URL/api/v1/suppliers/SUP-001/stock"
+check_header_present "GET stock -> header ETag (non-kosong)" "ETag" \
+  -H "X-API-Key: $API_KEY" "$STOCK_CACHE_URL"
+ETAG="$(header_value "ETag")"
+check_status_empty_body "GET stock If-None-Match -> 304 + body kosong" 304 \
+  -H "X-API-Key: $API_KEY" -H "If-None-Match: $ETAG" "$STOCK_CACHE_URL"
+
+echo "─ Rate Limit ──────────────────────────────────────────────────"
+check_header_present "GET /api/v1/suppliers -> header X-RateLimit-Limit" "X-RateLimit-Limit" \
+  -H "X-API-Key: $API_KEY" "$BASE_URL/api/v1/suppliers"
+check_status_body_contains "GET /api/v1/_ratelimit -> 200 + remaining" 200 \
+  "remaining" \
+  -H "X-API-Key: $API_KEY" "$BASE_URL/api/v1/_ratelimit"
+
+echo "─ Idempotency ─────────────────────────────────────────────────"
+# $$ keeps the key and supplier unique per run, so reruns do not collide.
+IDEM_KEY="smoke-idem-$$"
+IDEM_SUPPLIER="SUP-SMK-$$"
+check "POST /api/v1/suppliers + Idempotency-Key -> 201" 201 \
+  -X POST -H "Content-Type: application/json" -H "X-API-Key: $API_KEY" -H "Authorization: Bearer $TOKEN" \
+  -H "Idempotency-Key: $IDEM_KEY" \
+  -d "{\"supplier_id\":\"$IDEM_SUPPLIER\",\"supplier_name\":\"Smoke Idempotent\",\"api_status\":\"active\"}" \
+  "$BASE_URL/api/v1/suppliers"
+check_status_header_contains "POST ulang (key + body sama) -> 201 + Idempotency-Replayed" 201 \
+  "Idempotency-Replayed" "true" \
+  -X POST -H "Content-Type: application/json" -H "X-API-Key: $API_KEY" -H "Authorization: Bearer $TOKEN" \
+  -H "Idempotency-Key: $IDEM_KEY" \
+  -d "{\"supplier_id\":\"$IDEM_SUPPLIER\",\"supplier_name\":\"Smoke Idempotent\",\"api_status\":\"active\"}" \
+  "$BASE_URL/api/v1/suppliers"
+check_status_body_contains "POST key sama + body beda -> 409 IDEMPOTENCY_KEY_REUSED" 409 \
+  "IDEMPOTENCY_KEY_REUSED" \
+  -X POST -H "Content-Type: application/json" -H "X-API-Key: $API_KEY" -H "Authorization: Bearer $TOKEN" \
+  -H "Idempotency-Key: $IDEM_KEY" \
+  -d "{\"supplier_id\":\"$IDEM_SUPPLIER\",\"supplier_name\":\"Smoke Idempotent Berubah\",\"api_status\":\"active\"}" \
+  "$BASE_URL/api/v1/suppliers"
+
+echo "─ Webhooks ────────────────────────────────────────────────────"
+# Port 9 is unreachable: delivery attempts fail in the background, never block.
+WH_URL="http://127.0.0.1:9/smoke-hook-$$"
+check "POST /api/v1/webhooks/subscriptions -> 201" 201 \
+  -X POST -H "Content-Type: application/json" -H "X-API-Key: $API_KEY" -H "Authorization: Bearer $TOKEN" \
+  -d "{\"url\":\"$WH_URL\",\"events\":[\"stock.updated\"]}" \
+  "$BASE_URL/api/v1/webhooks/subscriptions"
+WH_ID="$(grep -o 'WH-[0-9]*' "$TMP_BODY" | head -1)"
+check "GET /api/v1/webhooks/subscriptions" 200 \
+  -H "X-API-Key: $API_KEY" "$BASE_URL/api/v1/webhooks/subscriptions"
+check "POST /api/v1/webhooks/subscriptions/$WH_ID/test -> 202" 202 \
+  -X POST -H "X-API-Key: $API_KEY" -H "Authorization: Bearer $TOKEN" \
+  "$BASE_URL/api/v1/webhooks/subscriptions/$WH_ID/test"
+check "GET /api/v1/webhooks/deliveries?subscription_id=$WH_ID" 200 \
+  -H "X-API-Key: $API_KEY" "$BASE_URL/api/v1/webhooks/deliveries?subscription_id=$WH_ID"
+check "DELETE /api/v1/webhooks/subscriptions/$WH_ID -> 204" 204 \
+  -X DELETE -H "X-API-Key: $API_KEY" -H "Authorization: Bearer $TOKEN" \
+  "$BASE_URL/api/v1/webhooks/subscriptions/$WH_ID"
+
+echo "─ Method Not Allowed ──────────────────────────────────────────"
+check "DELETE /api/v1/suppliers/SUP-001 -> 405" 405 \
+  -X DELETE -H "X-API-Key: $API_KEY" -H "Authorization: Bearer $TOKEN" \
+  "$BASE_URL/api/v1/suppliers/SUP-001"
 
 echo "─ Status Code Simulator ───────────────────────────────────────"
 for code in 400 401 403 404 429 500; do

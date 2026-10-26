@@ -60,10 +60,15 @@ function buildDocsHtml(baseUrl) {
         <tbody>
           <tr><td><span class="m get">GET</span></td><td><code>/health</code></td><td class="auth">publik</td><td>Cek status service.</td></tr>
           <tr><td><span class="m post">POST</span></td><td><code>/auth/token</code></td><td class="auth">publik</td><td>Ambil bearer token (client_id company-dashboard / secret s3cr3t-demo).</td></tr>
-          <tr><td><span class="m get">GET</span></td><td><code>/api/v1/suppliers</code></td><td class="auth">API Key</td><td>Daftar supplier.</td></tr>
+          <tr><td><span class="m get">GET</span></td><td><code>/api/v1/suppliers</code></td><td class="auth">API Key</td><td>Daftar supplier. Query: api_status, country, q, page, limit, sort.</td></tr>
           <tr><td><span class="m post">POST</span></td><td><code>/api/v1/suppliers</code></td><td class="auth">API Key + Bearer</td><td>Tambah supplier. 201 / 400 / 409.</td></tr>
           <tr><td><span class="m get">GET</span></td><td><code>/api/v1/suppliers/:supplierId</code></td><td class="auth">API Key</td><td>Detail supplier.</td></tr>
-          <tr><td><span class="m get">GET</span></td><td><code>/api/v1/suppliers/:supplierId/stock</code></td><td class="auth">API Key</td><td>Daftar stock. Query: status, page, limit, updated_since, sort.</td></tr>
+          <tr><td><span class="m put">PUT</span></td><td><code>/api/v1/suppliers/:supplierId</code></td><td class="auth">API Key + Bearer</td><td>Full replace supplier. 200 / 400 / 404.</td></tr>
+          <tr><td><span class="m patch">PATCH</span></td><td><code>/api/v1/suppliers/:supplierId</code></td><td class="auth">API Key + Bearer</td><td>Partial update supplier. 200 / 400 / 404.</td></tr>
+          <tr><td><span class="m put">PUT</span></td><td><code>/api/v1/suppliers/bulk</code></td><td class="auth">API Key + Bearer</td><td>Bulk replace supplier (update banyak supplier sekaligus). 200 / 207 (?mode=partial) / 400 / 404.</td></tr>
+          <tr><td><span class="m patch">PATCH</span></td><td><code>/api/v1/suppliers/bulk</code></td><td class="auth">API Key + Bearer</td><td>Bulk patch supplier (update sebagian banyak supplier sekaligus). 200 / 207 (?mode=partial) / 400 / 404.</td></tr>
+          <tr><td><span class="m get">GET</span></td><td><code>/api/v1/stock</code></td><td class="auth">API Key</td><td>Daftar stock semua supplier. Query: supplier_id, status, part_number, q, updated_since, page, limit, sort. <code>Accept: text/csv</code> untuk export CSV.</td></tr>
+          <tr><td><span class="m get">GET</span></td><td><code>/api/v1/suppliers/:supplierId/stock</code></td><td class="auth">API Key</td><td>Daftar stock satu supplier. Query: status, page, limit, updated_since, sort.</td></tr>
           <tr><td><span class="m get">GET</span></td><td><code>/api/v1/suppliers/:supplierId/stock/:partNumber</code></td><td class="auth">API Key</td><td>Detail satu part.</td></tr>
           <tr><td><span class="m post">POST</span></td><td><code>/api/v1/suppliers/:supplierId/stock</code></td><td class="auth">API Key + Bearer</td><td>Tambah record stock. 201 / 400.</td></tr>
           <tr><td><span class="m put">PUT</span></td><td><code>/api/v1/suppliers/:supplierId/stock/:partNumber</code></td><td class="auth">API Key + Bearer</td><td>Replace penuh. 200 / 404.</td></tr>
@@ -72,12 +77,32 @@ function buildDocsHtml(baseUrl) {
           <tr><td><span class="m post">POST</span></td><td><code>/api/v1/suppliers/:supplierId/stock/bulk</code></td><td class="auth">API Key + Bearer</td><td>Bulk upsert (integration sync). 201.</td></tr>
           <tr><td><span class="m put">PUT</span></td><td><code>/api/v1/suppliers/:supplierId/stock/bulk</code></td><td class="auth">API Key + Bearer</td><td>Bulk replace (update banyak part sekaligus). 200 / 207 (?mode=partial) / 400 / 404.</td></tr>
           <tr><td><span class="m patch">PATCH</span></td><td><code>/api/v1/suppliers/:supplierId/stock/bulk</code></td><td class="auth">API Key + Bearer</td><td>Bulk patch (update sebagian banyak part sekaligus). 200 / 207 (?mode=partial) / 400 / 404.</td></tr>
-          <tr><td><span class="m get">GET</span></td><td><code>/api/v1/suppliers/:supplierId/production-plans</code></td><td class="auth">API Key</td><td>Daftar production plan. Query: status, page, limit.</td></tr>
+          <tr><td><span class="m get">GET</span></td><td><code>/api/v1/production-plans</code></td><td class="auth">API Key</td><td>Daftar plan semua supplier. Query: supplier_id, status, part_number, q, updated_since, page, limit, sort.</td></tr>
+          <tr><td><span class="m get">GET</span></td><td><code>/api/v1/suppliers/:supplierId/production-plans</code></td><td class="auth">API Key</td><td>Daftar production plan satu supplier. Query: status, updated_since, page, limit, sort.</td></tr>
           <tr><td><span class="m get">GET</span></td><td><code>/api/v1/production-plans/:planId</code></td><td class="auth">API Key</td><td>Detail plan.</td></tr>
           <tr><td><span class="m post">POST</span></td><td><code>/api/v1/suppliers/:supplierId/production-plans</code></td><td class="auth">API Key + Bearer</td><td>Tambah plan. 201 / 400.</td></tr>
+          <tr><td><span class="m put">PUT</span></td><td><code>/api/v1/production-plans/:planId</code></td><td class="auth">API Key + Bearer</td><td>Full replace production plan. 200 / 400 / 404.</td></tr>
+          <tr><td><span class="m patch">PATCH</span></td><td><code>/api/v1/production-plans/:planId</code></td><td class="auth">API Key + Bearer</td><td>Partial update production plan. 200 / 400 / 404.</td></tr>
+          <tr><td><span class="m put">PUT</span></td><td><code>/api/v1/suppliers/:supplierId/production-plans/bulk</code></td><td class="auth">API Key + Bearer</td><td>Bulk replace production plan (update banyak plan sekaligus). 200 / 207 (?mode=partial) / 400 / 404.</td></tr>
+          <tr><td><span class="m patch">PATCH</span></td><td><code>/api/v1/suppliers/:supplierId/production-plans/bulk</code></td><td class="auth">API Key + Bearer</td><td>Bulk patch production plan (update sebagian banyak plan sekaligus). 200 / 207 (?mode=partial) / 400 / 404.</td></tr>
+          <tr><td><span class="m get">GET</span></td><td><code>/api/v1/webhooks/subscriptions</code></td><td class="auth">API Key</td><td>Daftar subscription webhook.</td></tr>
+          <tr><td><span class="m post">POST</span></td><td><code>/api/v1/webhooks/subscriptions</code></td><td class="auth">API Key + Bearer</td><td>Registrasi endpoint webhook. Event: stock.created/updated/deleted, plan.created/updated. 201 / 400.</td></tr>
+          <tr><td><span class="m delete">DELETE</span></td><td><code>/api/v1/webhooks/subscriptions/:subscriptionId</code></td><td class="auth">API Key + Bearer</td><td>Hapus subscription. 204 / 404.</td></tr>
+          <tr><td><span class="m post">POST</span></td><td><code>/api/v1/webhooks/subscriptions/:subscriptionId/test</code></td><td class="auth">API Key + Bearer</td><td>Kirim event uji <code>webhook.test</code>. 202 / 404.</td></tr>
+          <tr><td><span class="m get">GET</span></td><td><code>/api/v1/webhooks/deliveries</code></td><td class="auth">API Key</td><td>Log delivery webhook (terbaru dulu). Query: subscription_id, status, page, limit.</td></tr>
+          <tr><td><span class="m get">GET</span></td><td><code>/api/v1/_ratelimit</code></td><td class="auth">API Key</td><td>Kuota rate limit API key ini (limit, used, remaining, reset_at).</td></tr>
           <tr><td><span class="m get">GET</span></td><td><code>/api/v1/_simulate/:code</code></td><td class="auth">API Key</td><td>Contoh status: 400/401/403/404/429/500.</td></tr>
         </tbody>
       </table>
+
+      <p class="notice" style="margin-top:14px">
+        <strong>Rate limit:</strong> setiap respons <code>/api/v1/*</code> membawa
+        <code>X-RateLimit-Limit</code>, <code>X-RateLimit-Remaining</code>, <code>X-RateLimit-Reset</code>;
+        kuota habis dibalas <strong>429</strong> + <code>Retry-After</code>.
+        <strong>Idempotency:</strong> kirim <code>Idempotency-Key</code> pada operasi tulis; replay membalas
+        <code>Idempotency-Replayed: true</code>, sedangkan body berbeda untuk key yang sama dibalas
+        <strong>409</strong> <code>IDEMPOTENCY_KEY_REUSED</code>.
+      </p>
 
       <h2>Simulator (query param)</h2>
       <table>
