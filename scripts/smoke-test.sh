@@ -81,6 +81,30 @@ check "GET /api/v1/suppliers tanpa API key -> 401" 401 "$BASE_URL/api/v1/supplie
 check "GET /api/v1/suppliers/SUP-001" 200 -H "X-API-Key: $API_KEY" "$BASE_URL/api/v1/suppliers/SUP-001"
 check "GET /api/v1/suppliers/SUP-999 -> 404" 404 -H "X-API-Key: $API_KEY" "$BASE_URL/api/v1/suppliers/SUP-999"
 
+SUPPLIER_ID="SUP-SMOKE-$(date +%s)"
+check "POST /api/v1/suppliers tanpa bearer -> 401" 401 \
+  -X POST -H "Content-Type: application/json" -H "X-API-Key: $API_KEY" \
+  -d "{\"supplier_id\":\"$SUPPLIER_ID\",\"supplier_name\":\"Smoke Supplier\"}" \
+  "$BASE_URL/api/v1/suppliers"
+
+check "POST /api/v1/suppliers body tidak valid -> 400" 400 \
+  -X POST -H "Content-Type: application/json" -H "X-API-Key: $API_KEY" -H "Authorization: Bearer $TOKEN" \
+  -d "{\"supplier_name\":\"Tanpa Supplier ID\"}" \
+  "$BASE_URL/api/v1/suppliers"
+
+check "POST /api/v1/suppliers valid -> 201" 201 \
+  -X POST -H "Content-Type: application/json" -H "X-API-Key: $API_KEY" -H "Authorization: Bearer $TOKEN" \
+  -d "{\"supplier_id\":\"$SUPPLIER_ID\",\"supplier_name\":\"Smoke Supplier\",\"country\":\"Indonesia\",\"contact_email\":\"smoke@supplier.co.id\",\"api_status\":\"active\"}" \
+  "$BASE_URL/api/v1/suppliers"
+
+check "POST /api/v1/suppliers duplikat -> 409" 409 \
+  -X POST -H "Content-Type: application/json" -H "X-API-Key: $API_KEY" -H "Authorization: Bearer $TOKEN" \
+  -d "{\"supplier_id\":\"$SUPPLIER_ID\",\"supplier_name\":\"Smoke Supplier\",\"country\":\"Indonesia\",\"contact_email\":\"smoke@supplier.co.id\",\"api_status\":\"active\"}" \
+  "$BASE_URL/api/v1/suppliers"
+
+check "GET /api/v1/suppliers/$SUPPLIER_ID -> 200" 200 \
+  -H "X-API-Key: $API_KEY" "$BASE_URL/api/v1/suppliers/$SUPPLIER_ID"
+
 echo "─ Stock (Read) ────────────────────────────────────────────────"
 check "GET stock pagination page=1 limit=5" 200 \
   -H "X-API-Key: $API_KEY" "$BASE_URL/api/v1/suppliers/SUP-001/stock?page=1&limit=5"
@@ -158,6 +182,26 @@ check "GET production plan PLAN-001" 200 \
   -H "X-API-Key: $API_KEY" "$BASE_URL/api/v1/production-plans/PLAN-001"
 check "GET production plan PLAN-999 -> 404" 404 \
   -H "X-API-Key: $API_KEY" "$BASE_URL/api/v1/production-plans/PLAN-999"
+
+check "POST production plan tanpa bearer -> 401" 401 \
+  -X POST -H "Content-Type: application/json" -H "X-API-Key: $API_KEY" \
+  -d "{\"part_number\":\"SMOKE-PLAN-01\",\"part_name\":\"Smoke Plan Part\",\"production_plan\":\"Smoke Test Plan\",\"planned_quantity\":100,\"production_date\":\"2026-05-01\",\"production_status\":\"planned\",\"delivery_schedule\":\"2026-05-10\"}" \
+  "$BASE_URL/api/v1/suppliers/SUP-001/production-plans"
+
+check "POST production plan body tidak valid -> 400" 400 \
+  -X POST -H "Content-Type: application/json" -H "X-API-Key: $API_KEY" -H "Authorization: Bearer $TOKEN" \
+  -d "{\"part_number\":\"SMOKE-PLAN-01\"}" \
+  "$BASE_URL/api/v1/suppliers/SUP-001/production-plans"
+
+check "POST production plan valid -> 201" 201 \
+  -X POST -H "Content-Type: application/json" -H "X-API-Key: $API_KEY" -H "Authorization: Bearer $TOKEN" \
+  -d "{\"part_number\":\"SMOKE-PLAN-01\",\"part_name\":\"Smoke Plan Part\",\"production_plan\":\"Smoke Test Plan\",\"planned_quantity\":100,\"production_date\":\"2026-05-01\",\"production_status\":\"planned\",\"delivery_schedule\":\"2026-05-10\"}" \
+  "$BASE_URL/api/v1/suppliers/SUP-001/production-plans"
+
+check "POST production plan SUP-999 -> 404" 404 \
+  -X POST -H "Content-Type: application/json" -H "X-API-Key: $API_KEY" -H "Authorization: Bearer $TOKEN" \
+  -d "{\"part_number\":\"SMOKE-PLAN-01\",\"part_name\":\"Smoke Plan Part\",\"production_plan\":\"Smoke Test Plan\",\"planned_quantity\":100,\"production_date\":\"2026-05-01\",\"production_status\":\"planned\",\"delivery_schedule\":\"2026-05-10\"}" \
+  "$BASE_URL/api/v1/suppliers/SUP-999/production-plans"
 
 echo "─ Status Code Simulator ───────────────────────────────────────"
 for code in 400 401 403 404 429 500; do

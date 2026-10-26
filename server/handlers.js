@@ -23,6 +23,7 @@ const {
 const UOM_VALUES = ['PCS', 'BOX', 'METER', 'SET'];
 const STOCK_STATUS_VALUES = ['available', 'low', 'out'];
 const PRODUCTION_STATUS_VALUES = ['planned', 'in_progress', 'completed', 'delayed'];
+const SUPPLIER_API_STATUS_VALUES = ['active', 'inactive'];
 
 function nowIso() {
   return new Date().toISOString();
@@ -151,6 +152,72 @@ function validatePlanPayload(body) {
   return { valid: errors.length === 0, errors };
 }
 
+/**
+ * Validate a supplier payload. Returns { valid, errors, normalized }.
+ * supplier_id is normalized to uppercase so "sup-004" and "SUP-004" collide
+ * as the same supplier. Unknown fields are ignored on purpose.
+ */
+function validateSupplierPayload(body) {
+  const errors = [];
+  const out = {};
+  const has = (f) => body[f] !== undefined && body[f] !== null && String(body[f]).trim() !== '';
+
+  if (!has('supplier_id')) {
+    errors.push({ field: 'supplier_id', issue: 'field wajib tidak boleh kosong' });
+  } else {
+    const supplierId = String(body.supplier_id).trim().toUpperCase();
+    if (!/^SUP-[A-Z0-9-]{2,32}$/.test(supplierId)) {
+      errors.push({
+        field: 'supplier_id',
+        issue: 'format harus "SUP-" diikuti 2-32 karakter huruf, angka, atau tanda hubung',
+      });
+    } else {
+      out.supplier_id = supplierId;
+    }
+  }
+
+  if (!has('supplier_name')) {
+    errors.push({ field: 'supplier_name', issue: 'field wajib tidak boleh kosong' });
+  } else {
+    const supplierName = String(body.supplier_name).trim();
+    if (supplierName.length > 120) {
+      errors.push({ field: 'supplier_name', issue: 'maksimal 120 karakter' });
+    } else {
+      out.supplier_name = supplierName;
+    }
+  }
+
+  if (has('country')) {
+    out.country = String(body.country).trim();
+  } else {
+    out.country = 'Indonesia';
+  }
+
+  if (has('contact_email')) {
+    const email = String(body.contact_email).trim();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      errors.push({ field: 'contact_email', issue: 'format email tidak valid' });
+    } else {
+      out.contact_email = email;
+    }
+  }
+
+  if (has('api_status')) {
+    if (!SUPPLIER_API_STATUS_VALUES.includes(body.api_status)) {
+      errors.push({
+        field: 'api_status',
+        issue: `harus salah satu dari ${SUPPLIER_API_STATUS_VALUES.join(', ')}`,
+      });
+    } else {
+      out.api_status = body.api_status;
+    }
+  } else {
+    out.api_status = 'active';
+  }
+
+  return { valid: errors.length === 0, errors, normalized: out };
+}
+
 // ---- health & auth ------------------------------------------------------
 
 const health = (ctx) => {
@@ -207,6 +274,28 @@ const getSupplier = (ctx) => {
     return sendError(ctx.res, 404, `Supplier "${ctx.params.supplierId}" tidak ditemukan.`);
   }
   sendJson(ctx.res, 200, { data: supplier });
+};
+
+const createSupplier = (ctx) => {
+  const { valid, errors, normalized } = validateSupplierPayload(ctx.body || {});
+  if (!valid) {
+    return sendError(ctx.res, 400, 'Data supplier tidak valid. Periksa field berikut.', errors);
+  }
+  const existing = store.getSupplier(normalized.supplier_id);
+  if (existing) {
+    return sendError(
+      ctx.res,
+      409,
+      `Supplier "${normalized.supplier_id}" sudah terdaftar sebagai "${existing.supplier_name}". Gunakan GET /api/v1/suppliers/${normalized.supplier_id} untuk melihat detailnya.`
+    );
+  }
+  const created = store.createSupplier(normalized);
+  sendJson(
+    ctx.res,
+    201,
+    { data: created },
+    { Location: `/api/v1/suppliers/${created.supplier_id}` }
+  );
 };
 
 // ---- stock (read) -------------------------------------------------------
@@ -409,7 +498,12 @@ const createProductionPlan = (ctx) => {
     delivery_schedule: body.delivery_schedule,
     last_updated: body.last_updated || nowIso(),
   });
-  sendJson(ctx.res, 201, { data: created });
+  sendJson(
+    ctx.res,
+    201,
+    { data: created },
+    { Location: `/api/v1/production-plans/${created.plan_id}` }
+  );
 };
 
 module.exports = {
@@ -418,6 +512,7 @@ module.exports = {
   simulateCode,
   listSuppliers,
   getSupplier,
+  createSupplier,
   listStock,
   getStockItem,
   createStock,

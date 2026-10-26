@@ -62,6 +62,17 @@ const PLAN_SCHEMA = {
   },
 };
 
+const SUPPLIER_SCHEMA = {
+  type: 'object',
+  properties: {
+    supplier_id: { type: 'string', example: 'SUP-001' },
+    supplier_name: { type: 'string', example: 'PT Maju Jaya Komponen' },
+    country: { type: 'string', example: 'Indonesia' },
+    contact_email: { type: 'string', format: 'email', example: 'procurement@majujaya.co.id' },
+    api_status: { type: 'string', enum: ['active', 'inactive'], example: 'active' },
+  },
+};
+
 function jsonResponse(description, schema) {
   return { description, content: { 'application/json': { schema } } };
 }
@@ -97,6 +108,7 @@ const spec = {
     },
     schemas: {
       Error: ERROR_SCHEMA,
+      Supplier: SUPPLIER_SCHEMA,
       Stock: STOCK_SCHEMA,
       ProductionPlan: PLAN_SCHEMA,
     },
@@ -158,6 +170,37 @@ const spec = {
         tags: ['Suppliers'],
         summary: 'Daftar semua supplier',
         responses: { 200: jsonResponse('Daftar supplier', { type: 'object' }) },
+      },
+      post: {
+        tags: ['Suppliers'],
+        summary: 'Tambah supplier baru',
+        security: [{ ApiKeyAuth: [], BearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['supplier_id', 'supplier_name'],
+                properties: {
+                  supplier_id: { type: 'string', example: 'SUP-004' },
+                  supplier_name: { type: 'string', example: 'PT Demo Supplier' },
+                  country: { type: 'string', default: 'Indonesia', example: 'Indonesia' },
+                  contact_email: { type: 'string', format: 'email', example: 'demo@supplier.co.id' },
+                  api_status: { type: 'string', enum: ['active', 'inactive'], default: 'active' },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          201: jsonResponse('Supplier dibuat', {
+            type: 'object',
+            properties: { data: SUPPLIER_SCHEMA },
+          }),
+          400: errorResponse('Validasi gagal'),
+          409: errorResponse('supplier_id sudah terdaftar'),
+        },
       },
     },
     '/api/v1/suppliers/{supplierId}': {

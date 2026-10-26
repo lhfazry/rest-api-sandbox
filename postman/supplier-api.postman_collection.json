@@ -162,6 +162,39 @@
               }
             }
           ]
+        },
+        {
+          "name": "Tambah Supplier (POST) → 201",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-API-Key", "value": "{{api_key}}" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"supplier_id\": \"SUP-004\",\n  \"supplier_name\": \"PT Demo Supplier\",\n  \"country\": \"Indonesia\",\n  \"contact_email\": \"demo@supplier.co.id\",\n  \"api_status\": \"active\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/api/v1/suppliers", "host": ["{{base_url}}"], "path": ["api", "v1", "suppliers"] },
+            "description": "POST /api/v1/suppliers — tambah supplier (butuh bearer token). Kirim ulang dengan supplier_id sama akan membalas 409 Conflict."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 201 Created atau 409 sudah ada', function () {",
+                  "  pm.expect([201, 409]).to.include(pm.response.code);",
+                  "});",
+                  "if (pm.response.code === 201) {",
+                  "  pm.test('supplier_id = SUP-004', function () { pm.expect(pm.response.json().data.supplier_id).to.eql('SUP-004'); });",
+                  "}"
+                ]
+              }
+            }
+          ]
         }
       ]
     },

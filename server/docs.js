@@ -61,6 +61,7 @@ function buildDocsHtml(baseUrl) {
           <tr><td><span class="m get">GET</span></td><td><code>/health</code></td><td class="auth">publik</td><td>Cek status service.</td></tr>
           <tr><td><span class="m post">POST</span></td><td><code>/auth/token</code></td><td class="auth">publik</td><td>Ambil bearer token (client_id company-dashboard / secret s3cr3t-demo).</td></tr>
           <tr><td><span class="m get">GET</span></td><td><code>/api/v1/suppliers</code></td><td class="auth">API Key</td><td>Daftar supplier.</td></tr>
+          <tr><td><span class="m post">POST</span></td><td><code>/api/v1/suppliers</code></td><td class="auth">API Key + Bearer</td><td>Tambah supplier. 201 / 400 / 409.</td></tr>
           <tr><td><span class="m get">GET</span></td><td><code>/api/v1/suppliers/:supplierId</code></td><td class="auth">API Key</td><td>Detail supplier.</td></tr>
           <tr><td><span class="m get">GET</span></td><td><code>/api/v1/suppliers/:supplierId/stock</code></td><td class="auth">API Key</td><td>Daftar stock. Query: status, page, limit, updated_since, sort.</td></tr>
           <tr><td><span class="m get">GET</span></td><td><code>/api/v1/suppliers/:supplierId/stock/:partNumber</code></td><td class="auth">API Key</td><td>Detail satu part.</td></tr>

@@ -40,6 +40,7 @@ const ROUTES = [
   { method: 'GET', pattern: '/docs', handler: docsHandler, public: true },
 
   { method: 'GET', pattern: '/api/v1/suppliers', handler: handlers.listSuppliers },
+  { method: 'POST', pattern: '/api/v1/suppliers', handler: handlers.createSupplier, write: true },
   { method: 'GET', pattern: '/api/v1/suppliers/:supplierId', handler: handlers.getSupplier },
 
   { method: 'GET', pattern: '/api/v1/suppliers/:supplierId/stock', handler: handlers.listStock },
@@ -283,6 +284,7 @@ function printBanner() {
   console.log(`    GET    ${base}/health`);
   console.log(`    POST   ${base}/auth/token`);
   console.log(`    GET    ${base}/api/v1/suppliers`);
+  console.log(`    POST   ${base}/api/v1/suppliers`);
   console.log(`    GET    ${base}/api/v1/suppliers/SUP-001/stock?page=1&limit=5`);
   console.log(`    POST   ${base}/api/v1/suppliers/SUP-001/stock`);
   console.log(`    POST   ${base}/api/v1/suppliers/SUP-001/stock/bulk`);

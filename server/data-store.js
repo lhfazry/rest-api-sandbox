@@ -136,6 +136,12 @@ function getSupplier(supplierId) {
   return found ? clone(found) : null;
 }
 
+function createSupplier(record) {
+  suppliers.push(clone(record));
+  persist();
+  return clone(record);
+}
+
 // ---- Stock --------------------------------------------------------------
 // A stock row is uniquely identified by (supplier_id, part_number).
 
@@ -280,6 +286,7 @@ module.exports = {
   seed,
   listSuppliers,
   getSupplier,
+  createSupplier,
   listStock,
   getStockItem,
   createStock,

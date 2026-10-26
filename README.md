@@ -94,7 +94,15 @@ curl -X POST http://localhost:4010/api/v1/suppliers/SUP-001/stock \
   -H "Authorization: Bearer $TOKEN" \
   -d '{"part_number":"MJK-DEMO-01","part_name":"Part Demo","stock_quantity":50,"uom":"PCS","stock_location":"WH-JKT-01","stock_status":"available","unit_price":99000,"currency":"IDR"}'
 
-# 3) Demonstrasi 403: token read-only untuk operasi tulis
+# 3) Tambah supplier baru (201)
+curl -X POST http://localhost:4010/api/v1/suppliers \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: sup_demo_key_2026" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"supplier_id":"SUP-004","supplier_name":"PT Demo Supplier","country":"Indonesia","contact_email":"demo@supplier.co.id","api_status":"active"}'
+# Kirim ulang body yang sama -> 409 Conflict (supplier_id sudah terdaftar)
+
+# 4) Demonstrasi 403: token read-only untuk operasi tulis
 curl -X POST http://localhost:4010/api/v1/suppliers/SUP-001/stock \
   -H "Content-Type: application/json" \
   -H "X-API-Key: sup_demo_key_2026" \
@@ -115,6 +123,7 @@ Base URL: `http://localhost:4010`
 | GET | `/docs` | publik | Dokumentasi HTML |
 | GET | `/openapi.json` | publik | OpenAPI 3.0 |
 | GET | `/api/v1/suppliers` | API Key | Daftar supplier `{ data, meta.total }` |
+| POST | `/api/v1/suppliers` | API Key + Bearer | Tambah supplier → **201** / **400** / **409** |
 | GET | `/api/v1/suppliers/:supplierId` | API Key | Detail supplier |
 | GET | `/api/v1/suppliers/:supplierId/stock` | API Key | Daftar stock (query: `status`, `page`, `limit`, `updated_since`, `sort`) |
 | GET | `/api/v1/suppliers/:supplierId/stock/:partNumber` | API Key | Detail satu part |
@@ -181,6 +190,7 @@ curl -i "http://localhost:4010/api/v1/_simulate/500" \
 
 Field stock: `supplier_id`, `supplier_name`, `part_number`, `part_name`, `stock_quantity`, `uom` (`PCS/BOX/METER/SET`),
 `stock_location`, `stock_status` (`available/low/out`), `unit_price`, `currency` (`IDR`), `last_updated`.
+Field supplier: `supplier_id` (`SUP-...`), `supplier_name`, `country`, `contact_email`, `api_status` (`active/inactive`).
 Field production plan: `plan_id`, `supplier_id`, `part_number`, `part_name`, `production_plan`, `planned_quantity`,
 `production_date`, `production_status` (`planned/in_progress/completed/delayed`), `delivery_schedule`, `last_updated`.
 
