@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Company Internal System — Supplier Integration Dashboard</title>
-  <link rel="stylesheet" href="/dashboard/styles.css" />
+  <link rel="stylesheet" href="/dashboard/styles.css?v=2" />
 </head>
 <body>
   <header class="topbar">
@@ -97,6 +97,7 @@
     </section>
   </main>
 
-  <script src="/dashboard/app.js"></script>
+  <!-- ?v= bumps the URL so CDN caches (Cloudflare) can't serve an old build -->
+  <script src="/dashboard/app.js?v=2"></script>
 </body>
 </html>
