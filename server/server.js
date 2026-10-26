@@ -131,6 +131,9 @@ async function serveDashboard(res, urlPath) {
     res.writeHead(200, {
       'Content-Type': MIME[path.extname(full)] || 'application/octet-stream',
       'Content-Length': file.length,
+      // Classroom assets change with every deploy; do not let browsers/CDNs
+      // (Cloudflare in front of a Coolify deployment) serve a stale app.js.
+      'Cache-Control': 'no-cache',
     });
     res.end(file);
   } catch {

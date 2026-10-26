@@ -14,7 +14,14 @@
  */
 
 // --- Demo configuration (safe to share: this is a training sandbox) --------
-const API_BASE = 'http://localhost:4010';
+// Same-origin by default: the API server also serves this dashboard, so it works
+// on http://localhost:4010 AND behind a domain/reverse proxy (Coolify, nginx, ...)
+// without changing any code. Override only if the dashboard is hosted elsewhere:
+//   <script>window.SANDBOX_API_BASE = 'https://api.example.com'</script>
+const API_BASE = (
+  window.SANDBOX_API_BASE ||
+  (window.location.protocol === 'file:' ? 'http://localhost:4010' : window.location.origin)
+).replace(/\/+$/, '');
 const API_KEY = 'sup_demo_key_2026';
 
 // --- Element references ----------------------------------------------------
