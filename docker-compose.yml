@@ -1,34 +1,35 @@
 # Coolify-ready stack for the Mock Supplier API.
 #
-# Coolify (Docker Compose resource):
-#   1. New Resource -> Docker Compose (from Git) -> this repository, compose file: docker-compose.yml
-#   2. Set the domain for service "api" in the Domains field, and use internal port 4010
-#      (e.g. https://supplier-api.example.com:4010), OR uncomment SERVICE_FQDN_API_4010 below.
-#   3. Deploy.
-#
-# The app is zero-dependency and keeps data in memory: every restart/rebuild
-# resets stock/production plans to the JSON seed files in ./data. That is
-# intentional for the course sandbox — do not add a volume expecting persistence.
+# Coolify: New Resource -> Docker Compose (from Git) -> repo ini.
+# Penting: app listen di port 4010, BUKAN 80. Domain harus diarahkan ke 4010,
+# kalau tidak Traefik akan menjawab 503 "no available server".
 
 services:
-  api:
+  app:
     build:
       context: .
       dockerfile: Dockerfile
     environment:
       PORT: "4010"
       NODE_ENV: production
-      # Magic Coolify variable: presence alone asks Coolify to provision a domain
-      # and route it to internal port 4010 (service "api" -> API). Leave commented
-      # out if you prefer to set the domain manually in the UI.
-      # SERVICE_FQDN_API_4010:
-    # Metadata only. Coolify routes traffic through its reverse proxy to the
-    # container port; do NOT publish host ports in production (it would bypass
-    # the proxy/TLS). Uncomment only for direct local testing.
+      # Magic Coolify variable: deklarasi ini membuat Coolify memasang route
+      # domain -> port 4010 secara otomatis (service "app" -> APP).
+      # Domain hasil generate bisa diganti di UI menjadi rest-api.rumahcoding.id.
+      SERVICE_FQDN_APP_4010:
+    # Publikasikan port seperti project Astro yang sudah jalan. Berguna untuk
+    # cek langsung: curl http://<ip-server>:4010/health
+    ports:
+      - "4010:4010"
     expose:
       - "4010"
-    # ports:
-    #   - "4010:4010"
+    deploy:
+      resources:
+        limits:
+          cpus: '0.50'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 128M
     healthcheck:
       test:
         - CMD
@@ -39,4 +40,4 @@ services:
       timeout: 5s
       retries: 3
       start_period: 5s
-    restart: unless-stopped
+    restart: always
