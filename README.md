@@ -132,6 +132,8 @@ Base URL: `http://localhost:4010`
 | PATCH | `/api/v1/suppliers/:supplierId/stock/:partNumber` | API Key + Bearer | Update sebagian → **200** / **404** |
 | DELETE | `/api/v1/suppliers/:supplierId/stock/:partNumber` | API Key + Bearer | Hapus → **204** / **404** |
 | POST | `/api/v1/suppliers/:supplierId/stock/bulk` | API Key + Bearer | **Bulk upsert** → **201** (semua valid) / **207** (`?mode=partial`: sebagian berhasil) / **400** (strict, ada item invalid) |
+| PUT | `/api/v1/suppliers/:supplierId/stock/bulk` | API Key + Bearer | **Bulk replace** → **200** (semua item ada & valid) / **207** (`?mode=partial`) / **400** (item invalid) / **404** (ada part tidak ditemukan, atomic) |
+| PATCH | `/api/v1/suppliers/:supplierId/stock/bulk` | API Key + Bearer | **Bulk patch** → **200** / **207** (`?mode=partial`) / **400** / **404** (atomic) |
 | GET | `/api/v1/suppliers/:supplierId/production-plans` | API Key | Daftar production plan (query: `status`, `page`, `limit`) |
 | GET | `/api/v1/production-plans/:planId` | API Key | Detail plan |
 | POST | `/api/v1/suppliers/:supplierId/production-plans` | API Key + Bearer | Tambah plan → **201** / **400** |

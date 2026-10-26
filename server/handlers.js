@@ -452,6 +452,266 @@ const bulkUpsertStock = (ctx) => {
   });
 };
 
+/**
+ * Bulk replace — update many EXISTING parts in one request.
+ * Distinct from bulkUpsertStock: this endpoint never creates a row.
+ * Strict (default) is all-or-nothing: validate every item AND verify every
+ * part exists before touching the store. ?mode=partial skips invalid/missing
+ * items, applies the rest, and answers 207.
+ */
+const bulkReplaceStock = (ctx) => {
+  const { supplierId } = ctx.params;
+  const supplier = store.getSupplier(supplierId);
+  if (!supplier) {
+    return sendError(ctx.res, 404, `Supplier "${supplierId}" tidak ditemukan.`);
+  }
+  const body = ctx.body || {};
+  if (!Array.isArray(body.items) || body.items.length === 0) {
+    return sendError(
+      ctx.res,
+      400,
+      'Body harus berisi "items" berupa array minimal 1 item.',
+      [{ field: 'items', issue: 'array tidak boleh kosong' }]
+    );
+  }
+
+  // Duplicate part_number in one batch would make the result ambiguous -> 400.
+  const seen = new Set();
+  const duplicateErrors = [];
+  body.items.forEach((item, i) => {
+    const raw = item && item.part_number;
+    if (raw === undefined || raw === null || raw === '') return; // validation reports it
+    const partNumber = String(raw);
+    if (seen.has(partNumber)) {
+      duplicateErrors.push({
+        index: i,
+        field: 'part_number',
+        issue: `duplikat part_number "${partNumber}" di dalam items`,
+      });
+    } else {
+      seen.add(partNumber);
+    }
+  });
+  if (duplicateErrors.length > 0) {
+    return sendError(ctx.res, 400, 'Data bulk replace tidak valid.', duplicateErrors);
+  }
+
+  // Validate each item as a FULL replace (default partial=false) and keep the
+  // original index so errors still point at the right element.
+  const validationErrors = [];
+  const validEntries = []; // { index, record }
+  body.items.forEach((item, i) => {
+    const { valid, errors, normalized } = validateStockPayload(item || {});
+    if (!valid) {
+      errors.forEach((e) => validationErrors.push({ index: i, ...e }));
+    } else {
+      // supplier_id/supplier_name come from the path's supplier; part_number
+      // comes from the item and is never changed by the replacement.
+      validEntries.push({ index: i, record: withStockDefaults(normalized, supplier) });
+    }
+  });
+
+  const isPartial = ctx.query && ctx.query.mode === 'partial';
+
+  if (!isPartial) {
+    if (validationErrors.length > 0) {
+      return sendError(ctx.res, 400, 'Data bulk replace tidak valid.', validationErrors);
+    }
+    // Store checks existence atomically: if anything is missing, nothing is written.
+    const result = store.bulkReplaceStock(supplierId, validEntries.map((e) => e.record));
+    if (result.missing) {
+      const details = validEntries
+        .filter((e) => result.missing.includes(e.record.part_number))
+        .map((e) => ({
+          index: e.index,
+          field: 'part_number',
+          issue: `part "${e.record.part_number}" tidak ditemukan`,
+        }));
+      return sendError(
+        ctx.res,
+        404,
+        'Sebagian part tidak ditemukan, tidak ada data yang diubah.',
+        details
+      );
+    }
+    return sendJson(ctx.res, 200, {
+      message: 'Bulk replace berhasil (semua item diperbarui).',
+      data: result,
+    });
+  }
+
+  // ?mode=partial: keep only valid items that already exist, report the rest.
+  const missingErrors = [];
+  const existingRecords = [];
+  for (const entry of validEntries) {
+    if (store.getStockItem(supplierId, entry.record.part_number)) {
+      existingRecords.push(entry.record);
+    } else {
+      missingErrors.push({
+        index: entry.index,
+        field: 'part_number',
+        issue: `part "${entry.record.part_number}" tidak ditemukan`,
+      });
+    }
+  }
+  const allErrors = validationErrors
+    .concat(missingErrors)
+    .sort((a, b) => a.index - b.index);
+  const result =
+    existingRecords.length > 0
+      ? store.bulkReplaceStock(supplierId, existingRecords)
+      : { updated: 0, items: [] };
+  if (allErrors.length > 0) {
+    return sendJson(ctx.res, 207, {
+      message: 'Bulk replace selesai sebagian (partial success).',
+      summary: {
+        received: body.items.length,
+        succeeded: result.updated,
+        failed: body.items.length - result.updated,
+      },
+      data: result,
+      errors: allErrors,
+    });
+  }
+  sendJson(ctx.res, 200, {
+    message: 'Bulk replace berhasil (semua item diperbarui).',
+    data: result,
+  });
+};
+
+/**
+ * Bulk patch — partial-update many EXISTING parts in one request.
+ * Mirrors bulkReplaceStock but each item only changes the fields it sends.
+ * Never creates a row. Strict (default) is all-or-nothing; ?mode=partial
+ * skips invalid/missing items, applies the rest, and answers 207.
+ */
+const bulkPatchStock = (ctx) => {
+  const { supplierId } = ctx.params;
+  if (!store.getSupplier(supplierId)) {
+    return sendError(ctx.res, 404, `Supplier "${supplierId}" tidak ditemukan.`);
+  }
+  const body = ctx.body || {};
+  if (!Array.isArray(body.items) || body.items.length === 0) {
+    return sendError(
+      ctx.res,
+      400,
+      'Body harus berisi "items" berupa array minimal 1 item.',
+      [{ field: 'items', issue: 'array tidak boleh kosong' }]
+    );
+  }
+
+  // Duplicate part_number in one batch would make the result ambiguous -> 400.
+  const seen = new Set();
+  const duplicateErrors = [];
+  body.items.forEach((item, i) => {
+    const raw = item && item.part_number;
+    if (raw === undefined || raw === null || raw === '') return; // validation reports it
+    const partNumber = String(raw);
+    if (seen.has(partNumber)) {
+      duplicateErrors.push({
+        index: i,
+        field: 'part_number',
+        issue: `duplikat part_number "${partNumber}" di dalam items`,
+      });
+    } else {
+      seen.add(partNumber);
+    }
+  });
+  if (duplicateErrors.length > 0) {
+    return sendError(ctx.res, 400, 'Data bulk patch tidak valid.', duplicateErrors);
+  }
+
+  // Validate each item as a PARTIAL update. validateStockPayload(partial:true)
+  // does not require part_number, so enforce it explicitly as the item identity.
+  const validationErrors = [];
+  const validEntries = []; // { index, patch }
+  body.items.forEach((item, i) => {
+    const payload = item || {};
+    const { errors, normalized } = validateStockPayload(payload, { partial: true });
+    const hasPartNumber =
+      payload.part_number !== undefined &&
+      payload.part_number !== null &&
+      String(payload.part_number).trim() !== '';
+    if (!hasPartNumber) {
+      errors.push({ field: 'part_number', issue: 'field wajib tidak boleh kosong' });
+    }
+    if (errors.length > 0) {
+      errors.forEach((e) => validationErrors.push({ index: i, ...e }));
+    } else {
+      // supplier_id comes from the path; part_number stays the item's identity.
+      if (!normalized.last_updated) normalized.last_updated = nowIso();
+      validEntries.push({ index: i, patch: normalized });
+    }
+  });
+
+  const isPartial = ctx.query && ctx.query.mode === 'partial';
+
+  if (!isPartial) {
+    if (validationErrors.length > 0) {
+      return sendError(ctx.res, 400, 'Data bulk patch tidak valid.', validationErrors);
+    }
+    // Store checks existence atomically: if anything is missing, nothing is written.
+    const result = store.bulkPatchStock(supplierId, validEntries.map((e) => e.patch));
+    if (result.missing) {
+      const details = validEntries
+        .filter((e) => result.missing.includes(e.patch.part_number))
+        .map((e) => ({
+          index: e.index,
+          field: 'part_number',
+          issue: `part "${e.patch.part_number}" tidak ditemukan`,
+        }));
+      return sendError(
+        ctx.res,
+        404,
+        'Sebagian part tidak ditemukan, tidak ada data yang diubah.',
+        details
+      );
+    }
+    return sendJson(ctx.res, 200, {
+      message: 'Bulk patch berhasil (semua item diperbarui).',
+      data: result,
+    });
+  }
+
+  // ?mode=partial: keep only valid items that already exist, report the rest.
+  const missingErrors = [];
+  const existingPatches = [];
+  for (const entry of validEntries) {
+    if (store.getStockItem(supplierId, entry.patch.part_number)) {
+      existingPatches.push(entry.patch);
+    } else {
+      missingErrors.push({
+        index: entry.index,
+        field: 'part_number',
+        issue: `part "${entry.patch.part_number}" tidak ditemukan`,
+      });
+    }
+  }
+  const allErrors = validationErrors
+    .concat(missingErrors)
+    .sort((a, b) => a.index - b.index);
+  const result =
+    existingPatches.length > 0
+      ? store.bulkPatchStock(supplierId, existingPatches)
+      : { updated: 0, items: [] };
+  if (allErrors.length > 0) {
+    return sendJson(ctx.res, 207, {
+      message: 'Bulk patch selesai sebagian (partial success).',
+      summary: {
+        received: body.items.length,
+        succeeded: result.updated,
+        failed: body.items.length - result.updated,
+      },
+      data: result,
+      errors: allErrors,
+    });
+  }
+  sendJson(ctx.res, 200, {
+    message: 'Bulk patch berhasil (semua item diperbarui).',
+    data: result,
+  });
+};
+
 // ---- production planning ------------------------------------------------
 
 const listProductionPlans = (ctx) => {
@@ -520,6 +780,8 @@ module.exports = {
   patchStock,
   deleteStock,
   bulkUpsertStock,
+  bulkReplaceStock,
+  bulkPatchStock,
   listProductionPlans,
   getProductionPlan,
   createProductionPlan,

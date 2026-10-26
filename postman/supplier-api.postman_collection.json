@@ -551,6 +551,72 @@
           ]
         },
         {
+          "name": "Bulk Replace — Update Banyak Stock (PUT) → 200",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-API-Key", "value": "{{api_key}}" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"items\": [\n    {\n      \"part_number\": \"MJK-BRG-6205\",\n      \"part_name\": \"Bearing 6205 ZZ\",\n      \"stock_quantity\": 321,\n      \"uom\": \"PCS\",\n      \"stock_location\": \"WH-JKT-01\",\n      \"stock_status\": \"available\",\n      \"unit_price\": 45000,\n      \"currency\": \"IDR\"\n    },\n    {\n      \"part_number\": \"MJK-SEA-2040\",\n      \"part_name\": \"Oil Seal 20x40x7\",\n      \"stock_quantity\": 77,\n      \"uom\": \"PCS\",\n      \"stock_location\": \"WH-JKT-01\",\n      \"stock_status\": \"available\",\n      \"unit_price\": 18500,\n      \"currency\": \"IDR\"\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/suppliers/SUP-001/stock/bulk",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "suppliers", "SUP-001", "stock", "bulk"]
+            },
+            "description": "PUT bulk replace: hanya meng-update part yang SUDAH ADA (tidak pernah membuat baris baru). 200 / 207 (?mode=partial) / 400 / 404."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200 OK', function () { pm.response.to.have.status(200); });",
+                  "pm.test('2 item terupdate', function () { pm.expect(pm.response.json().data.updated).to.eql(2); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Bulk Patch — Update Sebagian Banyak Stock (PATCH) → 200",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-API-Key", "value": "{{api_key}}" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"items\": [\n    {\n      \"part_number\": \"MJK-BRG-6205\",\n      \"stock_quantity\": 250\n    },\n    {\n      \"part_number\": \"MJK-SEA-2040\",\n      \"stock_status\": \"low\"\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/suppliers/SUP-001/stock/bulk",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "suppliers", "SUP-001", "stock", "bulk"]
+            },
+            "description": "PATCH bulk patch: hanya mengubah field yang dikirim pada part yang SUDAH ADA (tidak pernah membuat baris baru). 200 / 207 (?mode=partial) / 400 / 404."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200 OK', function () { pm.response.to.have.status(200); });",
+                  "pm.test('2 item terupdate', function () { pm.expect(pm.response.json().data.updated).to.eql(2); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
           "name": "Hapus Stock (DELETE) → 204",
           "request": {
             "method": "DELETE",

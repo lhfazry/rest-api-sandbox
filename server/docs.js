@@ -70,6 +70,8 @@ function buildDocsHtml(baseUrl) {
           <tr><td><span class="m patch">PATCH</span></td><td><code>/api/v1/suppliers/:supplierId/stock/:partNumber</code></td><td class="auth">API Key + Bearer</td><td>Update sebagian. 200 / 404.</td></tr>
           <tr><td><span class="m delete">DELETE</span></td><td><code>/api/v1/suppliers/:supplierId/stock/:partNumber</code></td><td class="auth">API Key + Bearer</td><td>Hapus. 204 / 404.</td></tr>
           <tr><td><span class="m post">POST</span></td><td><code>/api/v1/suppliers/:supplierId/stock/bulk</code></td><td class="auth">API Key + Bearer</td><td>Bulk upsert (integration sync). 201.</td></tr>
+          <tr><td><span class="m put">PUT</span></td><td><code>/api/v1/suppliers/:supplierId/stock/bulk</code></td><td class="auth">API Key + Bearer</td><td>Bulk replace (update banyak part sekaligus). 200 / 207 (?mode=partial) / 400 / 404.</td></tr>
+          <tr><td><span class="m patch">PATCH</span></td><td><code>/api/v1/suppliers/:supplierId/stock/bulk</code></td><td class="auth">API Key + Bearer</td><td>Bulk patch (update sebagian banyak part sekaligus). 200 / 207 (?mode=partial) / 400 / 404.</td></tr>
           <tr><td><span class="m get">GET</span></td><td><code>/api/v1/suppliers/:supplierId/production-plans</code></td><td class="auth">API Key</td><td>Daftar production plan. Query: status, page, limit.</td></tr>
           <tr><td><span class="m get">GET</span></td><td><code>/api/v1/production-plans/:planId</code></td><td class="auth">API Key</td><td>Detail plan.</td></tr>
           <tr><td><span class="m post">POST</span></td><td><code>/api/v1/suppliers/:supplierId/production-plans</code></td><td class="auth">API Key + Bearer</td><td>Tambah plan. 201 / 400.</td></tr>

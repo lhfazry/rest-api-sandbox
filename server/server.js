@@ -46,6 +46,8 @@ const ROUTES = [
   { method: 'GET', pattern: '/api/v1/suppliers/:supplierId/stock', handler: handlers.listStock },
   { method: 'POST', pattern: '/api/v1/suppliers/:supplierId/stock', handler: handlers.createStock, write: true },
   { method: 'POST', pattern: '/api/v1/suppliers/:supplierId/stock/bulk', handler: handlers.bulkUpsertStock, write: true },
+  { method: 'PUT', pattern: '/api/v1/suppliers/:supplierId/stock/bulk', handler: handlers.bulkReplaceStock, write: true },
+  { method: 'PATCH', pattern: '/api/v1/suppliers/:supplierId/stock/bulk', handler: handlers.bulkPatchStock, write: true },
   { method: 'GET', pattern: '/api/v1/suppliers/:supplierId/stock/:partNumber', handler: handlers.getStockItem },
   { method: 'PUT', pattern: '/api/v1/suppliers/:supplierId/stock/:partNumber', handler: handlers.replaceStock, write: true },
   { method: 'PATCH', pattern: '/api/v1/suppliers/:supplierId/stock/:partNumber', handler: handlers.patchStock, write: true },
@@ -288,6 +290,8 @@ function printBanner() {
   console.log(`    GET    ${base}/api/v1/suppliers/SUP-001/stock?page=1&limit=5`);
   console.log(`    POST   ${base}/api/v1/suppliers/SUP-001/stock`);
   console.log(`    POST   ${base}/api/v1/suppliers/SUP-001/stock/bulk`);
+  console.log(`    PUT    ${base}/api/v1/suppliers/SUP-001/stock/bulk`);
+  console.log(`    PATCH  ${base}/api/v1/suppliers/SUP-001/stock/bulk`);
   console.log(`    GET    ${base}/api/v1/suppliers/SUP-001/production-plans`);
   console.log(`    GET    ${base}/api/v1/_simulate/500`);
   console.log('');

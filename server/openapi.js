@@ -316,6 +316,84 @@ const spec = {
         },
         responses: { 201: jsonResponse('Bulk sync selesai', { type: 'object' }), 207: jsonResponse('Bulk sync selesai sebagian (mode partial)', { type: 'object' }), 400: errorResponse('Validasi gagal') },
       },
+      put: {
+        tags: ['Stock (Write)'],
+        summary: 'Bulk replace (update banyak part sekaligus, tidak membuat baris baru)',
+        security: [{ ApiKeyAuth: [], BearerAuth: [] }],
+        parameters: [
+          { name: 'supplierId', in: 'path', required: true, schema: { type: 'string', example: 'SUP-001' } },
+          {
+            name: 'mode',
+            in: 'query',
+            required: false,
+            description: 'strict (default) = all-or-nothing (400/404, tidak ada data diubah). partial = item valid & ada tetap diproses, sisanya dilaporkan (207).',
+            schema: { type: 'string', enum: ['strict', 'partial'], default: 'strict' },
+          },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['items'],
+                properties: {
+                  items: { type: 'array', minItems: 1, items: STOCK_SCHEMA },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: jsonResponse('Semua item berhasil diganti', { type: 'object' }),
+          207: jsonResponse('Bulk replace selesai sebagian (mode partial)', { type: 'object' }),
+          400: errorResponse('Validasi gagal / part_number duplikat'),
+          404: errorResponse('Ada part yang tidak ditemukan (tidak ada data diubah)'),
+        },
+      },
+      patch: {
+        tags: ['Stock (Write)'],
+        summary: 'Bulk patch (update sebagian banyak part sekaligus, tidak membuat baris baru)',
+        security: [{ ApiKeyAuth: [], BearerAuth: [] }],
+        parameters: [
+          { name: 'supplierId', in: 'path', required: true, schema: { type: 'string', example: 'SUP-001' } },
+          {
+            name: 'mode',
+            in: 'query',
+            required: false,
+            description: 'strict (default) = all-or-nothing (400/404, tidak ada data diubah). partial = item valid & ada tetap diproses, sisanya dilaporkan (207).',
+            schema: { type: 'string', enum: ['strict', 'partial'], default: 'strict' },
+          },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['items'],
+                properties: {
+                  items: {
+                    type: 'array',
+                    minItems: 1,
+                    items: {
+                      type: 'object',
+                      required: ['part_number'],
+                      properties: STOCK_SCHEMA.properties,
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: jsonResponse('Semua item berhasil di-patch', { type: 'object' }),
+          207: jsonResponse('Bulk patch selesai sebagian (mode partial)', { type: 'object' }),
+          400: errorResponse('Validasi gagal / part_number duplikat'),
+          404: errorResponse('Ada part yang tidak ditemukan (tidak ada data diubah)'),
+        },
+      },
     },
     '/api/v1/suppliers/{supplierId}/production-plans': {
       get: {

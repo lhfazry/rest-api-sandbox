@@ -252,6 +252,72 @@ function bulkUpsertStock(supplierId, items) {
   return results;
 }
 
+/**
+ * Bulk replace — update existing rows only, all-or-nothing.
+ * WHY: unlike upsert, a batch replace must NEVER create a row. We check every
+ * (supplier_id, part_number) BEFORE writing, so one missing part leaves the
+ * store untouched. Records passed in are already normalized by the handler.
+ * Returns { missing: [partNumber] } when at least one part is absent (no
+ * writes), otherwise { updated, items: [{ part_number, action: 'updated' }] }.
+ */
+function bulkReplaceStock(supplierId, items) {
+  const replacements = new Map(); // stock index -> replacement record
+  const missing = [];
+  for (const raw of items) {
+    const idx = findStockIndex(supplierId, raw.part_number);
+    if (idx === -1) {
+      missing.push(raw.part_number);
+    } else {
+      replacements.set(idx, raw);
+    }
+  }
+  if (missing.length > 0) return { missing };
+  // Every part exists: replace all matched rows in one pass, persist once.
+  for (const [idx, raw] of replacements) {
+    stock[idx] = clone({ ...raw, supplier_id: supplierId, part_number: raw.part_number });
+  }
+  persist();
+  return {
+    updated: items.length,
+    items: items.map((raw) => ({ part_number: raw.part_number, action: 'updated' })),
+  };
+}
+
+/**
+ * Bulk patch — partial-update existing rows only, all-or-nothing.
+ * Pre-checks every (supplier_id, part_number) so a missing part leaves the
+ * store untouched. Identity fields are immutable: supplier_id comes from the
+ * path and part_number from the existing row.
+ * Returns { missing: [partNumber] } when at least one part is absent (no
+ * writes), otherwise { updated, items: [{ part_number, action: 'updated' }] }.
+ */
+function bulkPatchStock(supplierId, patches) {
+  const targets = new Map(); // stock index -> patch
+  const missing = [];
+  for (const patch of patches) {
+    const idx = findStockIndex(supplierId, patch.part_number);
+    if (idx === -1) {
+      missing.push(patch.part_number);
+    } else {
+      targets.set(idx, patch);
+    }
+  }
+  if (missing.length > 0) return { missing };
+  // Every part exists: merge all patches in one pass, persist once.
+  for (const [idx, patch] of targets) {
+    const current = stock[idx];
+    const next = { ...current, ...clone(patch) };
+    next.supplier_id = current.supplier_id;
+    next.part_number = current.part_number;
+    stock[idx] = next;
+  }
+  persist();
+  return {
+    updated: patches.length,
+    items: patches.map((patch) => ({ part_number: patch.part_number, action: 'updated' })),
+  };
+}
+
 // ---- Production plans ---------------------------------------------------
 
 function listProductionPlans(supplierId, opts = {}) {
@@ -294,6 +360,8 @@ module.exports = {
   patchStock,
   deleteStock,
   bulkUpsertStock,
+  bulkReplaceStock,
+  bulkPatchStock,
   listProductionPlans,
   getProductionPlan,
   createProductionPlan,
