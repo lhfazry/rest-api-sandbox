@@ -1,0 +1,42 @@
+# Coolify-ready stack for the Mock Supplier API.
+#
+# Coolify (Docker Compose resource):
+#   1. New Resource -> Docker Compose (from Git) -> this repository, compose file: docker-compose.yml
+#   2. Set the domain for service "api" in the Domains field, and use internal port 4010
+#      (e.g. https://supplier-api.example.com:4010), OR uncomment SERVICE_FQDN_API_4010 below.
+#   3. Deploy.
+#
+# The app is zero-dependency and keeps data in memory: every restart/rebuild
+# resets stock/production plans to the JSON seed files in ./data. That is
+# intentional for the course sandbox — do not add a volume expecting persistence.
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      PORT: "4010"
+      NODE_ENV: production
+      # Magic Coolify variable: presence alone asks Coolify to provision a domain
+      # and route it to internal port 4010 (service "api" -> API). Leave commented
+      # out if you prefer to set the domain manually in the UI.
+      # SERVICE_FQDN_API_4010:
+    # Metadata only. Coolify routes traffic through its reverse proxy to the
+    # container port; do NOT publish host ports in production (it would bypass
+    # the proxy/TLS). Uncomment only for direct local testing.
+    expose:
+      - "4010"
+    # ports:
+    #   - "4010:4010"
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:'+(process.env.PORT||4010)+'/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+    restart: unless-stopped

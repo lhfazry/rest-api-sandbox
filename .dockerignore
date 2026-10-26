@@ -1,0 +1,21 @@
+.git
+.gitignore
+.DS_Store
+**/.DS_Store
+
+# Not needed at runtime
+postman
+scripts
+README.md
+Dockerfile
+docker-compose.yml
+.dockerignore
+
+# Local/editor cruft
+node_modules
+npm-debug.log*
+.env
+.env.*
+.vscode
+.idea
+*.md
