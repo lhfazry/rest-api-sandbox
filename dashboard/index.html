@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Company Internal System — Supplier Integration Dashboard</title>
-  <link rel="stylesheet" href="/dashboard/styles.css?v=3" />
+  <link rel="stylesheet" href="/dashboard/styles.css?v=4" />
 </head>
 <body>
   <header class="topbar">
@@ -155,10 +155,35 @@
             </tbody>
           </table>
         </div>
+
+        <div class="pager" id="stock-pager">
+          <div class="pager__info">
+            <span class="pager__range" id="stock-pager-range" role="status">Menampilkan —</span>
+            <label class="pager__size" for="stock-page-size">
+              Baris per halaman
+              <select id="stock-page-size" data-page-size>
+                <option value="5">5</option>
+                <option value="10" selected>10</option>
+                <option value="25">25</option>
+                <option value="50">50</option>
+              </select>
+            </label>
+          </div>
+          <nav class="pager__nav" id="stock-pager-nav" aria-label="Navigasi halaman stock" hidden>
+            <button class="pager__step" type="button" data-page-step="-1"
+                    aria-label="Halaman sebelumnya">‹</button>
+            <div class="pager__pages" id="stock-pager-pages"></div>
+            <button class="pager__step" type="button" data-page-step="1"
+                    aria-label="Halaman berikutnya">›</button>
+          </nav>
+        </div>
+
         <p class="footnote">
           Data diambil dari <code>GET /api/v1/suppliers/&lt;id&gt;/stock</code> dan
           <code>GET /api/v1/suppliers/&lt;id&gt;/production-plans</code> dengan header
           <code>X-API-Key</code>. Plan digabungkan ke stock lewat <code>part_number</code>.
+          Semua baris dimuat lebih dulu (mengikuti <code>meta.total_pages</code>), lalu paging di
+          bawah tabel berjalan di browser tanpa request ulang.
         </p>
       </section>
     </section>
@@ -232,9 +257,34 @@
             </tbody>
           </table>
         </div>
+
+        <div class="pager" id="planning-pager">
+          <div class="pager__info">
+            <span class="pager__range" id="planning-pager-range" role="status">Menampilkan —</span>
+            <label class="pager__size" for="planning-page-size">
+              Baris per halaman
+              <select id="planning-page-size" data-page-size>
+                <option value="5">5</option>
+                <option value="10" selected>10</option>
+                <option value="25">25</option>
+                <option value="50">50</option>
+              </select>
+            </label>
+          </div>
+          <nav class="pager__nav" id="planning-pager-nav"
+               aria-label="Navigasi halaman production planning" hidden>
+            <button class="pager__step" type="button" data-page-step="-1"
+                    aria-label="Halaman sebelumnya">‹</button>
+            <div class="pager__pages" id="planning-pager-pages"></div>
+            <button class="pager__step" type="button" data-page-step="1"
+                    aria-label="Halaman berikutnya">›</button>
+          </nav>
+        </div>
+
         <p class="footnote">
           Diurutkan berdasarkan <code>production_date</code> lalu <code>plan_id</code>. Tanggal
-          ditampilkan dalam format Indonesia.
+          ditampilkan dalam format Indonesia. Paging di bawah tabel berjalan di browser tanpa
+          request ulang.
         </p>
       </section>
     </section>
@@ -267,16 +317,41 @@
             </tbody>
           </table>
         </div>
+
+        <div class="pager" id="supplier-pager">
+          <div class="pager__info">
+            <span class="pager__range" id="supplier-pager-range" role="status">Menampilkan —</span>
+            <label class="pager__size" for="supplier-page-size">
+              Baris per halaman
+              <select id="supplier-page-size" data-page-size>
+                <option value="5">5</option>
+                <option value="10" selected>10</option>
+                <option value="25">25</option>
+                <option value="50">50</option>
+              </select>
+            </label>
+          </div>
+          <nav class="pager__nav" id="supplier-pager-nav"
+               aria-label="Navigasi halaman supplier" hidden>
+            <button class="pager__step" type="button" data-page-step="-1"
+                    aria-label="Halaman sebelumnya">‹</button>
+            <div class="pager__pages" id="supplier-pager-pages"></div>
+            <button class="pager__step" type="button" data-page-step="1"
+                    aria-label="Halaman berikutnya">›</button>
+          </nav>
+        </div>
+
         <p class="footnote">
           Semua supplier dari <code>GET /api/v1/suppliers</code>. Jumlah stock dan plan dihitung
           dari endpoint masing-masing supplier. Baris dengan penanda <em>Aktif</em> adalah supplier
-          yang sedang dipilih di atas.
+          yang sedang dipilih di atas. Daftar dimuat sampai halaman terakhir
+          (<code>meta.total_pages</code>), jadi tidak lagi berhenti di 10 baris pertama.
         </p>
       </section>
     </section>
   </main>
 
   <!-- ?v= bumps the URL so CDN caches (Cloudflare) can't serve an old build -->
-  <script src="/dashboard/app.js?v=3"></script>
+  <script src="/dashboard/app.js?v=4"></script>
 </body>
 </html>

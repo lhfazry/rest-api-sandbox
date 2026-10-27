@@ -29,11 +29,19 @@ const API_BASE = (
 ).replace(/\/+$/, '');
 const API_KEY = 'sup_demo_key_2026';
 
-const SUPPLIERS_ENDPOINT = `${API_BASE}/api/v1/suppliers`;
+// The API caps `limit` at 50 rows per request, so every list is loaded page by
+// page (see fetchAllPages) instead of trusting one response. Nothing may be
+// silently cut off at the first 10/50 rows.
+const PAGE_LIMIT = 50;
+const MAX_PAGES = 20; // safety stop: 20 x 50 = 1000 rows per endpoint
+const PAGE_SIZES = [5, 10, 25, 50];
+const DEFAULT_PAGE_SIZE = 10;
+
+const SUPPLIERS_ENDPOINT = `${API_BASE}/api/v1/suppliers?limit=${PAGE_LIMIT}`;
 const stockEndpoint = (supplierId) =>
-  `${API_BASE}/api/v1/suppliers/${encodeURIComponent(supplierId)}/stock?limit=50&sort=stock_quantity:asc`;
+  `${API_BASE}/api/v1/suppliers/${encodeURIComponent(supplierId)}/stock?limit=${PAGE_LIMIT}&sort=stock_quantity:asc`;
 const plansEndpoint = (supplierId) =>
-  `${API_BASE}/api/v1/suppliers/${encodeURIComponent(supplierId)}/production-plans?limit=50`;
+  `${API_BASE}/api/v1/suppliers/${encodeURIComponent(supplierId)}/production-plans?limit=${PAGE_LIMIT}`;
 
 // --- Domain constants ------------------------------------------------------
 const STOCK_STATUSES = ['available', 'low', 'out'];
@@ -134,6 +142,16 @@ const state = {
     search: '',
     planStatus: '',
   },
+  // Client-side paging, one bucket per table. `filters` above stays the single
+  // source of truth for WHAT is shown; paging only slices those filtered rows.
+  paging: {
+    stock: { page: 1, pageSize: 10 },
+    planning: { page: 1, pageSize: 10 },
+    suppliers: { page: 1, pageSize: 10 },
+  },
+  // Supplier the current page numbers belong to, so a different supplier never
+  // inherits the previous one's page.
+  pagingSupplierId: '',
 };
 
 let supplierSignature = '';
@@ -234,6 +252,120 @@ function emptyRow(colspan, title, message, actionAttribute) {
     </tr>`;
 }
 
+// --- Client-side table paging ---------------------------------------------
+// All rows are already in memory, so changing page or page size never refetches.
+// paginateRows is pure: it clamps the requested page into the current range and
+// reports both the slice and the 1-based range to show the user.
+function paginateRows(rows, paging) {
+  const total = rows.length;
+  const pageSize = PAGE_SIZES.includes(paging.pageSize) ? paging.pageSize : DEFAULT_PAGE_SIZE;
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  const page = Math.min(Math.max(1, Math.round(paging.page) || 1), totalPages);
+  const start = (page - 1) * pageSize;
+  const end = Math.min(start + pageSize, total);
+  return {
+    rows: rows.slice(start, end),
+    page,
+    pageSize,
+    total,
+    totalPages,
+    startIndex: total === 0 ? 0 : start + 1,
+    endIndex: end,
+  };
+}
+
+/** Windowed page numbers: 1 … 4 5 6 … 12 (7 buttons at most). */
+function pageWindow(page, totalPages) {
+  if (totalPages <= 7) {
+    return Array.from({ length: totalPages }, (_, index) => index + 1);
+  }
+  const wanted = new Set([1, totalPages, page - 1, page, page + 1]);
+  if (page <= 3) [2, 3, 4].forEach((n) => wanted.add(n));
+  if (page >= totalPages - 2) {
+    [totalPages - 1, totalPages - 2, totalPages - 3].forEach((n) => wanted.add(n));
+  }
+  const pages = [...wanted].filter((n) => n >= 1 && n <= totalPages).sort((a, b) => a - b);
+  const windowed = [];
+  pages.forEach((n, index) => {
+    if (index > 0 && n - pages[index - 1] > 1) windowed.push('gap');
+    windowed.push(n);
+  });
+  return windowed;
+}
+
+function pagerRefs(rootId, tableId) {
+  const root = document.getElementById(rootId);
+  return {
+    root,
+    range: root.querySelector('.pager__range'),
+    nav: root.querySelector('.pager__nav'),
+    pages: root.querySelector('.pager__pages'),
+    size: root.querySelector('[data-page-size]'),
+    prev: root.querySelector('[data-page-step="-1"]'),
+    next: root.querySelector('[data-page-step="1"]'),
+    tableWrap: document.getElementById(tableId).closest('.table-wrap'),
+  };
+}
+
+const pagers = {
+  stock: pagerRefs('stock-pager', 'stock-table'),
+  planning: pagerRefs('planning-pager', 'plan-table'),
+  suppliers: pagerRefs('supplier-pager', 'supplier-table'),
+};
+
+function renderPager(name, result) {
+  const refs = pagers[name];
+  if (!refs || !refs.root) return;
+
+  // Nothing to page through: the table's own empty state takes over.
+  refs.root.hidden = result.total === 0;
+  refs.size.value = String(result.pageSize);
+  refs.range.textContent =
+    result.total === 0
+      ? 'Tidak ada baris untuk ditampilkan'
+      : `Menampilkan ${formatNumber(result.startIndex)}–${formatNumber(
+          result.endIndex
+        )} dari ${formatNumber(result.total)}`;
+
+  const showNav = result.totalPages > 1;
+  refs.nav.hidden = !showNav;
+  if (!showNav) {
+    refs.pages.innerHTML = '';
+    return;
+  }
+
+  refs.prev.disabled = result.page <= 1;
+  refs.next.disabled = result.page >= result.totalPages;
+  refs.pages.innerHTML = pageWindow(result.page, result.totalPages)
+    .map((entry) =>
+      entry === 'gap'
+        ? '<span class="pager__gap" aria-hidden="true">…</span>'
+        : entry === result.page
+          ? // Current page: focusable (so keyboard focus survives the re-render)
+            // but not actionable, and marked with aria-current.
+            `<button class="pager__page is-current" type="button" aria-current="page" aria-disabled="true" aria-label="${escapeHtml(
+              `Halaman ${entry}, halaman aktif`
+            )}">${entry}</button>`
+          : `<button class="pager__page" type="button" data-page="${entry}" aria-label="${escapeHtml(
+              `Halaman ${entry}`
+            )}">${entry}</button>`
+    )
+    .join('');
+}
+
+/** Clamp the stored page, write the clamped value back, then refresh the pager. */
+function paginateView(name, rows) {
+  const paging = state.paging[name];
+  const result = paginateRows(rows, paging);
+  paging.page = result.page;
+  renderPager(name, result);
+  return result;
+}
+
+function resetPaging(name) {
+  if (state.paging[name]) state.paging[name].page = 1;
+}
+
 async function fetchJson(endpoint) {
   const res = await fetch(endpoint, {
     headers: { 'X-API-Key': API_KEY },
@@ -256,6 +388,34 @@ async function fetchJson(endpoint) {
   }
 
   return res.json();
+}
+
+/**
+ * Load every page of a list endpoint and return the same `{ data, meta }` shape,
+ * so callers keep working with `result.data`.
+ *
+ * The API answers at most PAGE_LIMIT rows per request and reports how many pages
+ * exist in `meta.total_pages`; we follow that until the last page (MAX_PAGES is
+ * only a runaway guard). A failure on any page rejects the whole call, which
+ * keeps the existing "endpoint failed -> keep previous data" behaviour.
+ */
+async function fetchAllPages(endpoint) {
+  const separator = endpoint.includes('?') ? '&' : '?';
+  const data = [];
+  let page = 1;
+  let totalPages = 1;
+  let meta = null;
+
+  do {
+    const body = await fetchJson(`${endpoint}${separator}page=${page}`);
+    if (Array.isArray(body.data)) data.push(...body.data);
+    meta = body.meta || null;
+    const reported = Number(meta && meta.total_pages);
+    totalPages = Number.isFinite(reported) && reported > 0 ? reported : 1;
+    page += 1;
+  } while (page <= totalPages && page <= MAX_PAGES);
+
+  return { data, meta };
 }
 
 function dedupeErrors(errors) {
@@ -353,6 +513,14 @@ function syncSelectedFromDirectory() {
     state.plansOk = false;
   }
 
+  // Paging is per supplier: a different supplier always starts on page 1, while
+  // the 30s auto-refresh of the same supplier keeps the reader's current page.
+  if (state.pagingSupplierId !== state.supplierId) {
+    state.pagingSupplierId = state.supplierId;
+    resetPaging('stock');
+    resetPaging('planning');
+  }
+
   // Keep the chosen plan only while it still exists for this supplier.
   if (
     state.filters.plan &&
@@ -377,7 +545,9 @@ async function loadAll() {
     let suppliersOk = false;
 
     try {
-      const body = await fetchJson(SUPPLIERS_ENDPOINT);
+      // Paged: one request returns at most PAGE_LIMIT suppliers, so the list is
+      // no longer silently cut at the API's default limit of 10.
+      const body = await fetchAllPages(SUPPLIERS_ENDPOINT);
       suppliers = Array.isArray(body.data) ? body.data : [];
       suppliersOk = true;
     } catch (err) {
@@ -392,12 +562,13 @@ async function loadAll() {
     }
 
     // Small sandbox, tiny payloads: fetch every supplier so the Supplier tab
-    // can show real counts without a second loading path.
+    // can show real counts without a second loading path. Stock/plans are paged
+    // too, so a supplier with more than 50 rows is no longer truncated.
     const results = await Promise.all(
       supplierIds.map(async (supplierId) => {
         const [stockResult, planResult] = await Promise.allSettled([
-          fetchJson(stockEndpoint(supplierId)),
-          fetchJson(plansEndpoint(supplierId)),
+          fetchAllPages(stockEndpoint(supplierId)),
+          fetchAllPages(plansEndpoint(supplierId)),
         ]);
         return { supplierId, stockResult, planResult };
       })
@@ -671,6 +842,10 @@ function renderStockView() {
     return true;
   });
 
+  // Paging slices the filtered rows only: the summary cards, filter chips and
+  // panel meta below keep counting the full filtered set.
+  const page = paginateView('stock', rows);
+
   const plansByPart = plansForPartMap(matchingPlans);
 
   renderStockSummary(rows, hasData, filtersActive);
@@ -716,7 +891,7 @@ function renderStockView() {
     : `${state.supplierId} · data tidak tersedia`;
 
   els.stockTable.classList.toggle('show-plan-detail', productionFilterActive);
-  els.stockBody.innerHTML = renderStockRows(rows, plansByPart, productionFilterActive, hasData);
+  els.stockBody.innerHTML = renderStockRows(page.rows, plansByPart, productionFilterActive, hasData);
 }
 
 // --- Production planning rendering ----------------------------------------
@@ -734,6 +909,9 @@ function renderPlanningView() {
     )
     .slice()
     .sort(comparePlans);
+
+  // Paging runs over the filtered + sorted rows; the cards below count all of them.
+  const page = paginateView('planning', rows);
 
   const count = (status) => rows.filter((plan) => plan.production_status === status).length;
 
@@ -806,7 +984,7 @@ function renderPlanningView() {
     return;
   }
 
-  els.planBody.innerHTML = rows
+  els.planBody.innerHTML = page.rows
     .map(
       (plan) => `
         <tr>
@@ -830,6 +1008,8 @@ function renderSuppliersView() {
   const suppliers = state.suppliers.length ? state.suppliers : fallbackSuppliers();
   els.supplierMeta.textContent = suppliers.length ? `${suppliers.length} supplier` : '—';
 
+  const page = paginateView('suppliers', suppliers);
+
   if (!suppliers.length) {
     els.supplierBody.innerHTML = emptyRow(
       9,
@@ -839,7 +1019,7 @@ function renderSuppliersView() {
     return;
   }
 
-  els.supplierBody.innerHTML = suppliers
+  els.supplierBody.innerHTML = page.rows
     .map((supplier) => {
       const entry = state.directory.get(supplier.supplier_id);
       const stock = entry ? entry.stock : [];
@@ -904,6 +1084,7 @@ function clearStockFilter(key) {
   if (!(key in state.filters)) return;
   state.filters[key] = '';
   if (key === 'search') els.stockSearch.value = '';
+  resetPaging('stock');
   syncStockFilterControls();
   renderStockView();
 }
@@ -914,6 +1095,7 @@ function resetStockFilters() {
   state.filters.productionStatus = '';
   state.filters.search = '';
   els.stockSearch.value = '';
+  resetPaging('stock');
   syncStockFilterControls();
   renderStockView();
 }
@@ -921,6 +1103,7 @@ function resetStockFilters() {
 function resetPlanFilter() {
   state.filters.planStatus = '';
   els.planStatusFilter.value = '';
+  resetPaging('planning');
   renderPlanningView();
 }
 
@@ -928,9 +1111,37 @@ function chooseSupplier(supplierId) {
   if (!supplierId || supplierId === state.supplierId) return;
   state.supplierId = supplierId;
   els.supplierSelect.value = supplierId;
+  // syncSelectedFromDirectory() resets the stock/planning page for the new
+  // supplier (see pagingSupplierId there), so no page number leaks across.
   syncSelectedFromDirectory();
   renderAll();
   loadAll();
+}
+
+// --- Pager actions ---------------------------------------------------------
+const SECTION_RENDERERS = {
+  stock: () => renderStockView(),
+  planning: () => renderPlanningView(),
+  suppliers: () => renderSuppliersView(),
+};
+
+function goToPage(name, page) {
+  const paging = state.paging[name];
+  if (!paging) return;
+  const target = Math.max(1, Math.round(Number(page)) || 1);
+  if (target === paging.page) return;
+  // Prev/next keep their DOM node across the re-render, so a keyboard user can
+  // press Enter again; but when the new page disables that button the browser
+  // drops focus, so fall through and park focus on the current page marker.
+  const onStepButton =
+    document.activeElement && document.activeElement.closest('[data-page-step]');
+  paging.page = target;
+  SECTION_RENDERERS[name]();
+  if (onStepButton && !onStepButton.disabled) return;
+  // The page buttons are re-rendered, so put keyboard focus back on the current
+  // page marker; the range summary is a live region and announces the slice.
+  const current = pagers[name].pages.querySelector('[aria-current="page"]');
+  (current || pagers[name].tableWrap).focus();
 }
 
 // --- Tabs ------------------------------------------------------------------
@@ -975,21 +1186,25 @@ els.supplierSelect.addEventListener('change', (event) => {
 
 els.stockStatusFilter.addEventListener('change', (event) => {
   state.filters.stockStatus = event.target.value;
+  resetPaging('stock');
   renderStockView();
 });
 
 els.stockPlanFilter.addEventListener('change', (event) => {
   state.filters.plan = event.target.value;
+  resetPaging('stock');
   renderStockView();
 });
 
 els.stockProductionFilter.addEventListener('change', (event) => {
   state.filters.productionStatus = event.target.value;
+  resetPaging('stock');
   renderStockView();
 });
 
 els.stockSearch.addEventListener('input', (event) => {
   state.filters.search = event.target.value.trim();
+  resetPaging('stock');
   renderStockView();
 });
 
@@ -1007,6 +1222,7 @@ els.stockBody.addEventListener('click', (event) => {
 
 els.planStatusFilter.addEventListener('change', (event) => {
   state.filters.planStatus = event.target.value;
+  resetPaging('planning');
   renderPlanningView();
 });
 
@@ -1020,6 +1236,30 @@ els.supplierBody.addEventListener('click', (event) => {
   const button = event.target.closest('[data-select-supplier]');
   if (!button) return;
   chooseSupplier(button.dataset.selectSupplier);
+});
+
+// Pager wiring: one delegated click handler + one page-size listener per table,
+// so the pager markup survives every re-render of the table body.
+Object.entries(pagers).forEach(([name, refs]) => {
+  refs.root.addEventListener('click', (event) => {
+    const pageButton = event.target.closest('[data-page]');
+    if (pageButton) {
+      goToPage(name, Number(pageButton.dataset.page));
+      return;
+    }
+    const stepButton = event.target.closest('[data-page-step]');
+    if (stepButton) {
+      goToPage(name, state.paging[name].page + Number(stepButton.dataset.pageStep));
+    }
+  });
+
+  refs.size.addEventListener('change', (event) => {
+    const pageSize = Number(event.target.value);
+    state.paging[name].pageSize = PAGE_SIZES.includes(pageSize) ? pageSize : DEFAULT_PAGE_SIZE;
+    // A new page size starts from the first page so the reader sees the top.
+    resetPaging(name);
+    SECTION_RENDERERS[name]();
+  });
 });
 
 // First load + gentle auto-refresh so the "live" timestamp updates. Filters and

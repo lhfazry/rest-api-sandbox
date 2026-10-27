@@ -34,7 +34,7 @@ BASE_URL=http://localhost:4020 bash scripts/smoke-test.sh
 - `server/webhooks.js` — in-memory subscriptions and deliveries, HMAC-SHA256 signature (`X-Sandbox-Signature: t=<unix>,v1=<hex>`), max 3 attempts with 1s/2s backoff, scheduled off the response path. Storage is wiped on restart.
 - ETag/304: only **200 JSON** `/api/v1` GETs get an ETag (CSV excluded). The 304 decision lives in `sendJson` via `res._conditional`, so errors never carry an ETag. Webhook reads mix in the webhook revision.
 - `dashboard/` is static, served by the same server at `/` and `/dashboard/*`. `API_BASE` defaults to `window.location.origin` (override via `window.SANDBOX_API_BASE`); the API key is intentionally hardcoded for the demo. Open it over HTTP, never `file://`.
-- Dashboard asset URLs carry `?v=3`. Bump that version when editing `app.js` or `styles.css`; it is the existing cache-busting convention for browsers and the CDN in front of Coolify.
+- Dashboard asset URLs carry `?v=4`. Bump that version when editing `app.js` or `styles.css`; it is the existing cache-busting convention for browsers and the CDN in front of Coolify.
 
 ## Data
 
